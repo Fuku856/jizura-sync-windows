@@ -1,12 +1,18 @@
-// Playback from the macOS app (mac/main.swift), which calls `window.jizuraNative.update(state)`
-// with each reading of the Spotify / Music app. Same interface as SpotifyPlayer.
+// Playback from the desktop apps, with each reading of the player. Same interface as SpotifyPlayer.
+// macOS (mac/main.swift) reads the Spotify / Music app and calls `window.jizuraNative.update(state)`;
+// Windows (win/Program.cs) reads the system's media sessions and posts the state as a web message.
 
 import { t } from './i18n.js';
 
 /** A reading that disagrees with the running clock by less than this is jitter, not a seek. */
 const RESYNC_MS = 120;
 
-export const hasNative = () => !!window.webkit?.messageHandlers?.jizuraNative;
+const mac = () => window.webkit?.messageHandlers?.jizuraNative;
+/** `chrome.webview` exists only inside a WebView2 host, not in Edge itself. */
+const windows = () => window.chrome?.webview;
+
+export const hasNative = () => !!(mac() || windows());
+export const isWindows = () => !mac() && !!windows();
 
 export class NativePlayer {
     constructor() {
@@ -25,11 +31,16 @@ export class NativePlayer {
     onRecover(cb) { this._onRecover = cb; }
 
     start() {
-        window.jizuraNative = { update: (s) => this._update(s) };
+        this._onMessage = (e) => this._update(e.data);
+        if (isWindows()) windows().addEventListener('message', this._onMessage);
+        else window.jizuraNative = { update: (s) => this._update(s) };
         this._post({ cmd: 'start' });
     }
 
-    stop() { delete window.jizuraNative; }
+    stop() {
+        if (isWindows()) windows().removeEventListener('message', this._onMessage);
+        else delete window.jizuraNative;
+    }
 
     /** @returns {{trackId, title, artist, album, artUrl, durationMs, positionMs, paused} | null} */
     getState() {
@@ -46,6 +57,8 @@ export class NativePlayer {
     previous() { this._post({ cmd: 'previous' }); }
     /** Areas (CSS px: x, y, width, height) where a mouse drag must not move the window. */
     setNoDrag(rects) { this._post({ cmd: 'noDrag', rects }); }
+    /** Windows: move the window with the mouse button that is down now. */
+    dragWindow() { this._post({ cmd: 'dragWindow' }); }
     seek(ms) {
         ms = Math.max(0, Math.round(ms));
         // Move the local clock now so the lyrics jump with the slider; the next reading confirms.
@@ -54,8 +67,8 @@ export class NativePlayer {
     }
 
     _post(msg) {
-        if (msg.cmd !== 'start' && msg.cmd !== 'noDrag') msg.seq = ++this._seq;
-        window.webkit.messageHandlers.jizuraNative.postMessage(msg);
+        if (['play', 'pause', 'next', 'previous', 'seek'].includes(msg.cmd)) msg.seq = ++this._seq;
+        (mac() ?? windows()).postMessage(msg);
     }
 
     _update(s) {
@@ -90,7 +103,9 @@ function errorText({ kind, app, apps = [], detail }) {
     app = t(app ?? '');
     apps = apps.map((a) => t(a));
     switch (kind) {
-        case 'idle': return apps.length ? t('Nothing is playing in {apps}', { apps: apps.join(t(' or ')) }) : t('Open Spotify or Music and play a song');
+        case 'idle':
+            if (apps.length) return t('Nothing is playing in {apps}', { apps: apps.join(t(' or ')) });
+            return isWindows() ? t('Play a song in Spotify, Apple Music or a browser') : t('Open Spotify or Music and play a song');
         case 'permission': return t('Allow jizura-sync to control {app} in System Settings → Privacy & Security → Automation', { app });
         case 'script': return t('Could not read {app}: {detail}', { app, detail });
         default: return t('Could not read the current track from {app}', { app });

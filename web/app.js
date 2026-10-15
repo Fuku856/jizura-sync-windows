@@ -7,7 +7,7 @@
 
 import { auth, SpotifyPlayer } from './spotify.js';
 import { fetchLyrics, lrcToJizura } from './lyrics.js';
-import { hasNative, NativePlayer } from './native.js';
+import { hasNative, isWindows, NativePlayer } from './native.js';
 import { t, localizePage } from './i18n.js';
 
 localizePage();          // before anything below reads or replaces the page's text
@@ -448,8 +448,24 @@ class MockPlayer {
     stop() {}
 }
 
-/** The app window moves by a drag anywhere except the controls; tells it where those are. */
-function watchNoDrag(native) {
+/**
+ * The app window moves by a drag anywhere except the controls. On macOS the app takes the mouse
+ * itself and is told where the controls are; on Windows the page sees the mouse first, and asks
+ * the app to move the window once a press outside them has moved, so a click stays a click.
+ */
+function watchDrag(native) {
+    if (isWindows()) {
+        let down = null;
+        window.addEventListener('pointerdown', (e) => {
+            down = e.button === 0 && !document.fullscreenElement && !e.target.closest('#bar, #help, #gate, #toast') ? [e.screenX, e.screenY] : null;
+        });
+        window.addEventListener('pointermove', (e) => {
+            if (!down || !(e.buttons & 1)) { down = null; return; }
+            if (Math.hypot(e.screenX - down[0], e.screenY - down[1]) > 3) { down = null; native.dragWindow(); }
+        });
+        window.addEventListener('pointerup', () => { down = null; });
+        return;
+    }
     let last = '';
     (function check() {
         requestAnimationFrame(check);
@@ -467,7 +483,7 @@ async function boot() {
     wake();
     const q = new URLSearchParams(location.search);
     if (q.has('mock')) { player = new MockPlayer(q.get('mock'), Number(q.get('t')) || 0); showBar(); return; }
-    // Inside the macOS app: the Spotify / Music app on this Mac, no sign-in.
+    // Inside the macOS or Windows app: the players on this computer, no sign-in.
     if (hasNative()) {
         player = new NativePlayer();
         // A failed read is retried; once it succeeds, the bar goes back to what it said before.
@@ -476,7 +492,7 @@ async function boot() {
         player.onRecover(() => { if (beforeError !== null) setStatus(beforeError); beforeError = null; });
         player.start();
         showBar();
-        watchNoDrag(player);
+        watchDrag(player);
         return;
     }
     try { await auth.handleRedirect(); } catch (err) { showGate(err.message); return; }
