@@ -64,6 +64,8 @@ sealed class PlayerBridge
     const int RetryIntervalMs = 2000;
     /** A session belongs to another process; one that stops answering must not hold up the rest. */
     static readonly TimeSpan CallTimeout = TimeSpan.FromSeconds(2);
+    /** How long a seek may take to show up in the player's timeline before readings count again. */
+    const int SeekSettleMs = 1000;
 
     readonly Action<string> send;
     readonly SynchronizationContext ui;
@@ -79,6 +81,12 @@ sealed class PlayerBridge
     JsonObject? track;
     bool metaStale;          // a session changed its metadata: read it again even for the same key
     int commandSeq;
+    /**
+     * A seek the player accepted but its timeline may not show yet: a player such as a browser
+     * moves after TryChangePlaybackPositionAsync returns. Until a reading lands on it (or
+     * SeekSettleMs passes), readings carry the seq before the seek, so the page drops them.
+     */
+    (string app, int seq, double ms, long at)? pendingSeek;
     readonly Dictionary<string, string> names = [];
 
     public PlayerBridge(Action<string> send)
@@ -108,6 +116,7 @@ sealed class PlayerBridge
     public async void Start()
     {
         commandSeq = 0;       // the new page counts its commands from 0
+        pendingSeek = null;
         if (manager == null)
         {
             try
@@ -177,6 +186,10 @@ sealed class PlayerBridge
             if ((string?)error["kind"] == "idle") return;
             delay = RetryIntervalMs;
         }
+        else if (pendingSeek is { } seek)
+        {
+            delay = (int)Math.Max(50, seek.at + SeekSettleMs - Environment.TickCount64);    // the reading that ends the wait
+        }
         else
         {
             if ((bool?)message["playing"] != true || !visible) return;
@@ -211,6 +224,7 @@ sealed class PlayerBridge
         {
             if (session != null)
             {
+                var ms = Math.Max(0, (double?)body["ms"] ?? 0);
                 Task<bool> call = cmd switch
                 {
                     "play" => session.TryPlayAsync().AsTask(),
@@ -218,10 +232,11 @@ sealed class PlayerBridge
                     "next" => session.TrySkipNextAsync().AsTask(),
                     "previous" => session.TrySkipPreviousAsync().AsTask(),
                     "seek" => session.TryChangePlaybackPositionAsync(
-                        (session.GetTimelineProperties().StartTime + TimeSpan.FromMilliseconds(Math.Max(0, (double?)body["ms"] ?? 0))).Ticks).AsTask(),
+                        (session.GetTimelineProperties().StartTime + TimeSpan.FromMilliseconds(ms)).Ticks).AsTask(),
                     _ => Task.FromResult(true),
                 };
                 if (!await call.WaitAsync(CallTimeout)) Program.Log($"{cmd}: refused by {followed}");
+                else if (cmd == "seek") pendingSeek = (session.SourceAppUserModelId, seq, ms, Environment.TickCount64);
             }
         }
         catch (Exception e) { Program.Log($"{cmd} failed: {e.Message}"); }
@@ -288,9 +303,23 @@ sealed class PlayerBridge
                 trackKey = key;
             }
             followed = id;
+            var readingSeq = seq;
+            // A reading started before the seek was recorded carries an older seq; the page drops it anyway.
+            if (pendingSeek is { } seek && seq >= seek.seq)
+            {
+                // Between the target and where playback could have got to since: the seek has landed.
+                var elapsed = Environment.TickCount64 - seek.at;
+                var landed = positionMs >= seek.ms - 250 && positionMs <= seek.ms + elapsed + 250;
+                if (seek.app == id && seq == seek.seq && !landed && elapsed < SeekSettleMs)
+                {
+                    readingSeq = seq - 1;
+                    Program.Log($"seek to {seek.ms:F0} not shown yet ({positionMs:F0})");
+                }
+                else pendingSeek = null;
+            }
             return new JsonObject
             {
-                ["seq"] = seq, ["source"] = AppName(id), ["playing"] = isPlaying,
+                ["seq"] = readingSeq, ["source"] = AppName(id), ["playing"] = isPlaying,
                 ["positionMs"] = Math.Max(0, positionMs), ["track"] = track.DeepClone(),
             };
         }
