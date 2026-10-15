@@ -32,4 +32,19 @@ New-Item -ItemType Directory -Force $jizura | Out-Null
 Copy-Item -Recurse (Join-Path $root 'web/vendor/JIZURA/src') $jizura
 Copy-Item (Join-Path $root 'web/vendor/JIZURA/LICENSE'), (Join-Path $root 'web/vendor/JIZURA/THIRD_PARTY_NOTICES.md') $jizura
 
+# JIZURA's audio analysis (10_audio.js) and video / PNG export (11_export.js) serve its editor, not
+# playback: the app never calls them, and the only outside use (02_fonts.js, uploaded faces) checks
+# that they exist. They leave the build and the copied index.html; the source stays as upstream has it.
+$unused = '10_audio.js', '11_export.js'
+foreach ($f in $unused) { Remove-Item (Join-Path $jizura "src/$f") }
+$index = Join-Path $web 'index.html'
+$utf8 = New-Object System.Text.UTF8Encoding $false
+$html = [IO.File]::ReadAllText($index, $utf8)
+foreach ($f in $unused) {
+    $tag = "<script src=`"vendor/JIZURA/src/$f`"></script>"
+    if (-not $html.Contains($tag)) { throw "index.html no longer loads $f -- update build-win.ps1" }
+    $html = [regex]::Replace($html, "[ \t]*$([regex]::Escape($tag))\r?\n", '')
+}
+[IO.File]::WriteAllText($index, $html, $utf8)
+
 Write-Host "Built: $(Join-Path $out 'jizura-sync.exe')"

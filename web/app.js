@@ -16,8 +16,29 @@ const J = window.J;
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('view');
-const ctx = canvas.getContext('2d');
-const renderer = new J.Renderer();
+// What every animation frame touches.
+const el = { notice: $('notice'), bar: $('bar'), playPause: $('playPause'), elapsed: $('elapsed'), total: $('total'), seek: $('seek') };
+// Opaque: JIZURA paints the whole background every frame, and a cleared canvas is the page's black.
+const ctx = canvas.getContext('2d', { alpha: false });
+
+// Bumped when a web font arrives: everything drawn before it may show a fallback face.
+let fontGen = 0;
+
+/**
+ * A cut-to-cut transition composites the previous cut's resting frame, which JIZURA draws again
+ * into `transA` on every frame of the transition -- always at the same time, so always the same
+ * picture. Transitions only read `transA`, so the picture from the last call is kept.
+ */
+class SyncRenderer extends J.Renderer {
+    frame(ctx, plan, t, opt = {}) {
+        if (ctx.canvas !== this.transA || !opt.noTrans || !opt.noPost || !opt.noHud) return super.frame(ctx, plan, t, opt);
+        const key = [plan, t, ctx.canvas.width, ctx.canvas.height, opt.scale, !!opt.fast, !!opt.noGhost, fontGen];
+        if (this.restKey?.every((v, i) => v === key[i])) return;
+        super.frame(ctx, plan, t, opt);
+        this.restKey = key;
+    }
+}
+const renderer = new SyncRenderer();
 
 // Characters JIZURA's HUD / title cards draw besides the lyrics (same set as its editor UI).
 const HUD_CHARS = '0123456789:./-_()【】・No.LYRICRECUNTITLEDXYlinebpminterlude—─／ ';
@@ -47,7 +68,6 @@ let look = null;             // JIZURA random look (omakase) applied on top of t
 let plan = null;
 let planAspect = null;       // JIZURA aspect key ('16:9' …) the plan was built for
 let loadToken = 0;
-let slow = false;
 let offsetMs = Number(read(OFFSET_KEY)) || 0;
 let komaPref = read(KOMA_KEY) === null ? null : Number(read(KOMA_KEY));
 let unifyPref = read(UNIFY_KEY) !== '0';
@@ -93,6 +113,7 @@ function buildPlan() {
     project.timing = Object.assign({}, project.timing, { bpm: 0, snap: false });
     project.enabled = Object.assign({}, J.defaultProject().enabled, look.enabled);
     plan = J.plan(project, song.durationMs ? { duration: song.durationMs / 1000 } : null);
+    pace.settleUntil = performance.now() + SETTLE_MS;
     sizeCanvas();
     J.ensureFonts(song.lyrics + song.title + song.artist + HUD_CHARS, J.fontsOfPlan(plan)).catch(() => {});
     setStatus(`${J.STYLES[project.style]?.name ?? project.style} · ${J.MOODS[project.mood]?.name ?? ''} · ${t('{n} cuts', { n: plan.cuts.length })}${project.unify ? ` · ${t('same style per section')}` : ''}`);
@@ -100,6 +121,7 @@ function buildPlan() {
 
 async function loadTrack(state) {
     const token = ++loadToken;
+    pace.upWait = UP_WAIT_MS;        // another song may not have the cuts that held the level down
     trackId = state.trackId;
     $('track').textContent = `${state.title} — ${state.artist}`;
     showArt(state.artUrl);
@@ -155,6 +177,78 @@ function showArt(url = null) {
     if (url) $('art').src = url;
 }
 
+// ---------------------------------------------------------------- quality
+
+// Some JIZURA cuts cost far more than a frame -- a layout with a hundred glyphs is drawn three
+// times over for the chromatic ghosts. While frames come late the look steps down one level at a
+// time, and steps back up once frames have kept time for a while. Measured on a Radeon 780M at
+// 1440 px, a `cylinder` cut ran at 18 fps at level 0 and 68 fps at level 4.
+const QUALITY = [
+    { fast: false, scale: 1, ghost: true, fps: 0 },          // as JIZURA draws it (fps 0: the plan's)
+    { fast: true, scale: 1, ghost: true, fps: 0 },           // no blur filters or bloom
+    { fast: true, scale: 0.75, ghost: true, fps: 0 },        // fewer pixels
+    { fast: true, scale: 0.75, ghost: false, fps: 0 },       // no chromatic ghost passes
+    { fast: true, scale: 0.5, ghost: false, fps: 0 },
+    { fast: true, scale: 0.5, ghost: false, fps: 30 },
+];
+const LATE_WINDOW = 12;      // recent frames looked at for a step down …
+const LATE_LIMIT = 4;        // … and how many of them may be late
+const UP_WAIT_MS = 3000;     // no late frame for this long before a step up
+const UP_WAIT_MAX_MS = 30000;
+const STEP_DOWN_MS = 500;    // a level gets this long to show what it does before the next step down
+// After a new plan or a font, frames build caches (text layout, glyph samples, glyph masks) and run
+// long for a moment however fast the machine is: not judged.
+const SETTLE_MS = 1500;
+
+// `?quality=<level>` keeps one level (for comparing them).
+const qualityPin = (() => {
+    const q = new URLSearchParams(location.search).get('quality');
+    return q === null || q === '' || !Number.isFinite(Number(q)) ? null : Math.min(QUALITY.length - 1, Math.max(0, Math.round(Number(q))));
+})();
+let quality = qualityPin ?? 0;
+const pace = {
+    last: 0,                 // previous animation frame
+    drew: false,             // … drew a frame that is to be judged
+    base: 1000 / 60,         // the display's frame interval (smallest seen, creeping up slowly)
+    recent: [],              // late or not, for the last LATE_WINDOW judged frames
+    since: 0,                // the level last changed
+    calm: 0,                 // no late frame since
+    raisedAt: -Infinity, upWait: UP_WAIT_MS,
+    settleUntil: 0,
+    drawMs: 0, lateRate: 0,  // running averages for `jizuraSync.perf`
+};
+
+function setQuality(level, now) {
+    if (level === quality) return;
+    // A step up that is taken back at once waits twice as long before the next try.
+    if (level > quality && now - pace.raisedAt < UP_WAIT_MS) pace.upWait = Math.min(UP_WAIT_MAX_MS, pace.upWait * 2);
+    if (level < quality) pace.raisedAt = now;
+    quality = level;
+    pace.recent.length = 0;
+    pace.since = pace.calm = now;
+    sizeCanvas();
+    console.info(`[jizura-sync] quality ${quality}`);
+}
+
+/** Judges the frame drawn by the previous animation frame by when this one came. */
+function judgeFrame(now) {
+    const interval = now - pace.last, drew = pace.drew;
+    pace.last = now; pace.drew = false;
+    if (interval > 0) pace.base = Math.min(interval, pace.base + 0.01);
+    // Over a second: hidden, minimized or stopped in a debugger, not slow.
+    if (!drew || interval > 1000 || now < pace.settleUntil) return;
+    const due = Math.max(pace.base, 1000 / (QUALITY[quality].fps || plan?.fps || 60));
+    const late = interval > due * 1.5;
+    pace.lateRate += ((late ? 1 : 0) - pace.lateRate) * 0.02;
+    if (qualityPin !== null) return;
+    pace.recent.push(late);
+    if (pace.recent.length > LATE_WINDOW) pace.recent.shift();
+    if (late) pace.calm = now;
+    if (quality < QUALITY.length - 1 && now - pace.since >= STEP_DOWN_MS && pace.recent.filter(Boolean).length >= LATE_LIMIT) setQuality(quality + 1, now);
+    else if (quality > 0 && now - pace.calm >= pace.upWait) setQuality(quality - 1, now);
+}
+document.addEventListener('visibilitychange', () => { pace.recent.length = 0; pace.drew = false; });
+
 // ---------------------------------------------------------------- drawing
 
 function sizeCanvas() {
@@ -163,35 +257,40 @@ function sizeCanvas() {
     let cssW = window.innerWidth, cssH = cssW / ar;
     if (cssH > window.innerHeight) { cssH = window.innerHeight; cssW = cssH * ar; }
     const dpr = Math.min(2, window.devicePixelRatio || 1);
-    const pw = Math.round(Math.min(plan.W, cssW * dpr)), ph = Math.round(pw / ar);
+    const pw = Math.round(Math.min(plan.W, cssW * dpr) * QUALITY[quality].scale), ph = Math.round(pw / ar);
     if (canvas.width !== pw || canvas.height !== ph) { canvas.width = pw; canvas.height = ph; }
     canvas.style.width = `${cssW}px`;
     canvas.style.height = `${cssH}px`;
 }
 
-// What the canvas shows. A frame depends only on the plan, the time, the canvas size and the
-// loaded fonts, so one that would repeat it (paused) is skipped; a font arriving redraws.
+// What the canvas shows. A frame depends only on the plan, the time, the canvas size, the quality
+// level and the loaded fonts, so one that would repeat it (paused, or a display faster than the
+// plan's frame rate) is skipped; a font arriving redraws.
 let drawn = null;
-document.fonts.addEventListener('loadingdone', () => { drawn = null; });
+document.fonts.addEventListener('loadingdone', () => { drawn = null; fontGen++; pace.settleUntil = performance.now() + SETTLE_MS; });
 
-function tick() {
+function tick(now) {
     requestAnimationFrame(tick);
+    judgeFrame(now);
     const state = player?.getState();
     if (state && state.trackId && state.trackId !== trackId) (state.durationMs > 0 ? loadTrack(state) : loadStream(state));
     else if (state?.trackId === trackId) showArt(state.artUrl);
     if (state) lastError = null;
     updateBar(state);
     // The notice belongs to the song it was shown for: gone once that song is.
-    if ((!state || state.trackId !== trackId) && !$('notice').hidden) $('notice').hidden = true;
+    if ((!state || state.trackId !== trackId) && !el.notice.hidden) el.notice.hidden = true;
     if (!plan || !state || state.trackId !== trackId) return;
-    const time = Math.min(Math.max(0, (state.positionMs + offsetMs) / 1000), plan.duration - 1e-3);
-    if (drawn && drawn.plan === plan && drawn.time === time && drawn.w === canvas.width && drawn.h === canvas.height) return;
-    drawn = { plan, time, w: canvas.width, h: canvas.height };
+    // On the plan's frame grid, as JIZURA renders a video: a faster display adds no new pictures.
+    const Q = QUALITY[quality], fps = Q.fps || plan.fps || 60;
+    const time = Math.min(Math.floor(Math.max(0, (state.positionMs + offsetMs) / 1000) * fps + 1e-6) / fps, plan.duration - 1e-3);
+    if (drawn && drawn.plan === plan && drawn.time === time && drawn.w === canvas.width && drawn.h === canvas.height && drawn.quality === quality) return;
+    // The first frame of a cut lays out its text and builds its caches, which no level makes cheaper.
+    const cut = J.cutAt(plan, time);
+    pace.drew = !!drawn && drawn.plan === plan && drawn.cut === cut;
+    drawn = { plan, time, w: canvas.width, h: canvas.height, quality, cut };
     const t0 = performance.now();
-    renderer.frame(ctx, plan, time, { scale: canvas.width / plan.W, fast: slow });
-    // Same hysteresis as JIZURA's editor: drop blur filters while frames run long.
-    const dt = performance.now() - t0;
-    slow = dt > 30 ? true : dt < 14 ? false : slow;
+    renderer.frame(ctx, plan, time, { scale: canvas.width / plan.W, fast: Q.fast, noGhost: !Q.ghost });
+    pace.drawMs += (performance.now() - t0 - pace.drawMs) * 0.05;
 }
 
 // ---------------------------------------------------------------- Spotify
@@ -376,13 +475,15 @@ function fmtTime(ms) {
 
 let seeking = false;         // the slider is being dragged: do not move it under the pointer
 function updateBar(state) {
-    if ($('bar').hidden) return;
-    $('playPause').classList.toggle('play', !player?.isPlaying());
+    // Clicked away, it is out of sight: it catches up on the frame it comes back.
+    if (el.bar.hidden || barHidden) return;
+    el.playPause.classList.toggle('play', !player?.isPlaying());
     if (!state) return;
     const elapsed = fmtTime(state.positionMs), total = fmtTime(state.durationMs);
-    if ($('elapsed').textContent !== elapsed && !seeking) $('elapsed').textContent = elapsed;
-    if ($('total').textContent !== total) $('total').textContent = total;
-    if (!seeking) $('seek').value = String(Math.round(1000 * state.positionMs / Math.max(1, state.durationMs)));
+    if (el.elapsed.textContent !== elapsed && !seeking) el.elapsed.textContent = elapsed;
+    if (el.total.textContent !== total) el.total.textContent = total;
+    const pos = String(Math.round(1000 * state.positionMs / Math.max(1, state.durationMs)));
+    if (!seeking && el.seek.value !== pos) el.seek.value = pos;
 }
 
 function showBar() {
@@ -510,6 +611,9 @@ async function boot() {
 }
 
 // Read-only debug handle: `jizuraSync.plan` in devtools.
-window.jizuraSync = { get plan() { return plan; }, get song() { return song; } };
+window.jizuraSync = {
+    get plan() { return plan; }, get song() { return song; },
+    get perf() { return { quality, pinned: qualityPin !== null, canvas: `${canvas.width}x${canvas.height}`, drawMs: +pace.drawMs.toFixed(1), lateRate: +pace.lateRate.toFixed(3), upWaitMs: pace.upWait }; },
+};
 
 boot();
