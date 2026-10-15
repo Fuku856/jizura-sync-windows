@@ -89,7 +89,7 @@ export class NativePlayer {
         if (this._lastError) { this._lastError = null; this._onRecover(); }
         const now = performance.now();
         const sameTrack = this._track?.trackId === s.track.trackId;
-        if (!sameTrack) this._track = s.track;
+        this._track = s.track;     // the same track may come back with its cover
         const predicted = this._anchorPos + (this._playing ? now - this._anchorAt : 0);
         if (sameTrack && s.playing === this._playing && s.playing && Math.abs(predicted - s.positionMs) < RESYNC_MS) return;
         this._playing = s.playing;

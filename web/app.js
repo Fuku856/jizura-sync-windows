@@ -41,6 +41,7 @@ const BAR_KEY = 'jizura-sync.barHidden';
 
 let player = null;
 let trackId = null;          // track the current plan belongs to
+let artUrl = null;           // cover the bar shows
 let song = null;             // { title, artist, durationMs, lyrics } for the current track
 let look = null;             // JIZURA random look (omakase) applied on top of the default project
 let plan = null;
@@ -101,8 +102,7 @@ async function loadTrack(state) {
     const token = ++loadToken;
     trackId = state.trackId;
     $('track').textContent = `${state.title} — ${state.artist}`;
-    $('art').hidden = !state.artUrl;
-    if (state.artUrl) $('art').src = state.artUrl;
+    showArt(state.artUrl);
     $('notice').hidden = true;
     look = rollLook(hashString(state.trackId));
     song = { title: state.title, artist: state.artist, durationMs: state.durationMs, lyrics: NO_LYRICS };
@@ -141,11 +141,18 @@ function loadStream(state) {
     song = null; plan = null;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     $('track').textContent = [state.title, state.artist].filter(Boolean).join(' — ');
-    $('art').hidden = !state.artUrl;
-    if (state.artUrl) $('art').src = state.artUrl;
+    showArt(state.artUrl);
     const why = t('No lyrics: a stream has no song position to time them to');
     setStatus(why);
     showNotice(why);
+}
+
+/** A player may send the cover after the title (a browser fetches the artwork later), so it follows each state. */
+function showArt(url = null) {
+    if (url === artUrl) return;
+    artUrl = url;
+    $('art').hidden = !url;
+    if (url) $('art').src = url;
 }
 
 // ---------------------------------------------------------------- drawing
@@ -171,6 +178,7 @@ function tick() {
     requestAnimationFrame(tick);
     const state = player?.getState();
     if (state && state.trackId && state.trackId !== trackId) (state.durationMs > 0 ? loadTrack(state) : loadStream(state));
+    else if (state?.trackId === trackId) showArt(state.artUrl);
     if (state) lastError = null;
     updateBar(state);
     // The notice belongs to the song it was shown for: gone once that song is.
