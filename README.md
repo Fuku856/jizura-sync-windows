@@ -69,6 +69,22 @@ open build/jizura-sync.app
 
 It needs Xcode 26 or later (for `actool`, which compiles the icon); there is no Xcode project. The first build downloads Sparkle into `build/`. Already cloned without `--recursive`? Run `git submodule update --init`.
 
+### Windows app
+
+There is no release for Windows yet; build it from source on Windows 10 (2004) or later. It needs the [.NET 10 SDK](https://dotnet.microsoft.com/download) and Node.js (for a syntax check of the page), and runs on the WebView2 Runtime that Windows 11 already has.
+
+```powershell
+git clone --recursive https://github.com/Saqoosha/jizura-sync.git
+cd jizura-sync
+powershell -ExecutionPolicy Bypass -File tools/build-win.ps1   # build\win\jizura-sync.exe
+build\win\jizura-sync.exe
+```
+
+- It follows whatever plays on this PC through Windows' media controls (the media flyout by the volume control): Spotify, Apple Music, a browser tab, and other players. A session that is playing wins; while nothing plays it stays on the one it followed last. Play / pause, previous / next and seek in the bar go back to that player.
+- A browser tab without a song length (a live stream, or a page that sets no media position) shows the "no song position" notice, and so do players that report none.
+- Window snapping, dragging the page to move the window, fullscreen and keeping the display awake work as on the Mac. The window has a normal Windows title bar.
+- There is no installer, auto-update or code signing yet.
+
 ### How it works
 
 - **Playback.** The app reads Spotify's and Music's player state and position over Apple Events, addressed to each app's process so that a player you just quit is never relaunched. Both apps announce a track change, play and pause, and the app reads right away; neither announces a seek, so while a song plays it also reads once a second. Paused, idle or hidden, it sends nothing.

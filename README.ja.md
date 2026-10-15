@@ -69,6 +69,22 @@ open build/jizura-sync.app
 
 Xcode 26 以降が要る（アイコンを作る `actool` のため）。Xcode プロジェクトは無い。最初のビルドで Sparkle を `build/` にダウンロードする。`--recursive` を付けずに clone したときは `git submodule update --init`。
 
+### Windows アプリ
+
+Windows 向けのリリースはまだ無い。Windows 10 (2004) 以降で、ソースからビルドする。[.NET 10 SDK](https://dotnet.microsoft.com/download) と Node.js（ページの構文チェック用）が要る。実行には WebView2 Runtime を使い、これは Windows 11 には最初から入っている。
+
+```powershell
+git clone --recursive https://github.com/Saqoosha/jizura-sync.git
+cd jizura-sync
+powershell -ExecutionPolicy Bypass -File tools/build-win.ps1   # build\win\jizura-sync.exe
+build\win\jizura-sync.exe
+```
+
+- この PC で再生中のものを、Windows のメディア操作（音量のフライアウトに出るもの）から追う。Spotify、Apple Music、ブラウザのタブなど、何でもよい。再生中のものを優先し、何も再生していない間は最後に追っていたものに留まる。バーの再生 / 一時停止・前へ / 次へ・シークは、そのプレイヤーに送られる
+- 曲の長さが分からないもの（ライブ配信や、再生位置を出さないページ、長さを出さないプレイヤー）は、「曲の中の位置がない」と表示する
+- ウィンドウの形の調整、ページのドラッグでのウィンドウの移動、フルスクリーン、ディスプレイのスリープ防止は Mac と同じ。タイトルバーは普通の Windows のもの
+- インストーラー、自動アップデート、コード署名はまだ無い
+
 ### 仕組み
 
 - **再生位置**: Spotify とミュージックApp の再生状態と位置を Apple Events で読む。宛先は各アプリのプロセスなので、終了したばかりのプレイヤーを起動しなおすことはない。どちらのアプリも曲の切り替わり・再生・一時停止を通知してくるので、そのたびにすぐ読む。シークは通知されないので、再生中は 1 秒ごとにも読む。一時停止中、再生なし、ウィンドウが隠れているときは何も送らない
