@@ -21,6 +21,7 @@ Usage and architecture are in README.md. This file holds what the code does not 
 
 - **Icon:** `win/icon.png` (1024 px, upstream's art) is the source; `tools/make-win-icon.ps1` writes `win/app.ico` from it. The art is full-bleed with no padding of its own, so the script clips it to a rounded square. It was drawn by a script (Hiragino Sans W9 「字」 with RGB split, torn strips and noise); image generation mangled the character once the glitch was strong. Thick strokes only — hairlines vanish at small sizes.
 - **Japanese UI:** `web/i18n.js` holds every UI string, keyed by its English text (`t('… {var}', vars)`, `data-i18n*` attributes in `index.html`, translated before the Tesla block rewrites the help). The native bridge sends error kinds and app names, never sentences, so all wording stays in one file. In the Windows app, `navigator.language` is WebView2's default: Windows' display language.
+- **Commits and PRs are written in Japanese, with no emoji** — no gitmoji prefix (the user's rule from 2026-10-17). Earlier history, through PR #6, and upstream still use English gitmoji; do not copy that style. PR titles become the "What's Changed" lines of the release notes, so write them as changelog entries.
 
 ## Checking changes
 
