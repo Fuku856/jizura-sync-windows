@@ -23,7 +23,7 @@ if (Test-Path $out) { Remove-Item -Recurse -Force $out }
 dotnet publish (Join-Path $root 'win/jizura-sync.csproj') -c Release -r win-x64 --self-contained false -o $out -nologo -v quiet
 if ($LASTEXITCODE) { throw 'dotnet publish failed' }
 
-# Same selection as the Mac app and the Cloudflare deploy: the page loads only JIZURA's src/*.js.
+# Same selection as the Cloudflare deploy: the page loads only JIZURA's src/*.js.
 $web = Join-Path $out 'web'
 robocopy (Join-Path $root 'web') $web /E /XD vendor /XF .DS_Store /NFL /NDL /NJH /NJS /NP | Out-Null
 if ($LASTEXITCODE -ge 8) { throw 'copying web/ failed' }

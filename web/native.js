@@ -1,18 +1,15 @@
-// Playback from the desktop apps, with each reading of the player. Same interface as SpotifyPlayer.
-// macOS (mac/main.swift) reads the Spotify / Music app and calls `window.jizuraNative.update(state)`;
-// Windows (win/Program.cs) reads the system's media sessions and posts the state as a web message.
+// Playback from the Windows app (win/Program.cs), which reads the system's media sessions and posts
+// each reading as a web message. Same interface as SpotifyPlayer.
 
 import { t } from './i18n.js';
 
 /** A reading that disagrees with the running clock by less than this is jitter, not a seek. */
 const RESYNC_MS = 120;
 
-const mac = () => window.webkit?.messageHandlers?.jizuraNative;
 /** `chrome.webview` exists only inside a WebView2 host, not in Edge itself. */
-const windows = () => window.chrome?.webview;
+const webview = () => window.chrome?.webview;
 
-export const hasNative = () => !!(mac() || windows());
-export const isWindows = () => !mac() && !!windows();
+export const hasNative = () => !!webview();
 
 export class NativePlayer {
     constructor() {
@@ -32,15 +29,11 @@ export class NativePlayer {
 
     start() {
         this._onMessage = (e) => this._update(e.data);
-        if (isWindows()) windows().addEventListener('message', this._onMessage);
-        else window.jizuraNative = { update: (s) => this._update(s) };
+        webview().addEventListener('message', this._onMessage);
         this._post({ cmd: 'start' });
     }
 
-    stop() {
-        if (isWindows()) windows().removeEventListener('message', this._onMessage);
-        else delete window.jizuraNative;
-    }
+    stop() { webview().removeEventListener('message', this._onMessage); }
 
     /** @returns {{trackId, title, artist, album, artUrl, durationMs, positionMs, paused} | null} */
     getState() {
@@ -55,9 +48,7 @@ export class NativePlayer {
     pause() { this._post({ cmd: 'pause' }); }
     next() { this._post({ cmd: 'next' }); }
     previous() { this._post({ cmd: 'previous' }); }
-    /** Areas (CSS px: x, y, width, height) where a mouse drag must not move the window. */
-    setNoDrag(rects) { this._post({ cmd: 'noDrag', rects }); }
-    /** Windows: move the window with the mouse button that is down now. */
+    /** Move the window with the mouse button that is down now. */
     dragWindow() { this._post({ cmd: 'dragWindow' }); }
     seek(ms) {
         ms = Math.max(0, Math.round(ms));
@@ -68,16 +59,16 @@ export class NativePlayer {
 
     _post(msg) {
         if (['play', 'pause', 'next', 'previous', 'seek'].includes(msg.cmd)) msg.seq = ++this._seq;
-        (mac() ?? windows()).postMessage(msg);
+        webview().postMessage(msg);
     }
 
     _update(s) {
         if (s.seq < this._seq) return;
         if (s.error) {
             s.error.message = errorText(s.error);
-            // Nothing to follow, or not allowed to look. A failed read keeps the track: the retry
-            // usually succeeds, and dropping it would blank the bar in between.
-            if (s.error.kind === 'idle' || s.error.kind === 'permission') {
+            // Nothing to follow. A failed read keeps the track: the retry usually succeeds, and
+            // dropping it would blank the bar in between.
+            if (s.error.kind === 'idle') {
                 this._track = null;
                 this._playing = false;
             }
@@ -105,8 +96,7 @@ function errorText({ kind, app, apps = [], detail }) {
     switch (kind) {
         case 'idle':
             if (apps.length) return t('Nothing is playing in {apps}', { apps: apps.join(t(' or ')) });
-            return isWindows() ? t('Play a song in Spotify, Apple Music or a browser') : t('Open Spotify or Music and play a song');
-        case 'permission': return t('Allow jizura-sync to control {app} in System Settings → Privacy & Security → Automation', { app });
+            return t('Play a song in Spotify, Apple Music or a browser');
         case 'script': return t('Could not read {app}: {detail}', { app, detail });
         default: return t('Could not read the current track from {app}', { app });
     }

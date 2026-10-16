@@ -1,15 +1,15 @@
-# Writes win/app.ico from the Mac icon's 1024 px art (mac/AppIcon.icon/Assets/icon.png).
+# Writes win/app.ico from the 1024 px art (win/icon.png).
 # Run once after the art changes, and commit the result.
 #
 #   powershell -ExecutionPolicy Bypass -File tools/make-win-icon.ps1
 #
-# The art is full-bleed (macOS masks it); Windows shows an icon as is, so it gets a rounded square
-# here. Every size is stored as PNG, which Windows Vista and later read inside .ico files.
+# The art is full-bleed; Windows shows an icon as is, so it gets a rounded square here. Every size
+# is stored as PNG, which Windows Vista and later read inside .ico files.
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 
 $root = Split-Path -Parent $PSScriptRoot
-$art = [System.Drawing.Image]::FromFile((Join-Path $root 'mac/AppIcon.icon/Assets/icon.png'))
+$art = [System.Drawing.Image]::FromFile((Join-Path $root 'win/icon.png'))
 $sizes = 16, 24, 32, 48, 64, 128, 256
 $images = foreach ($size in $sizes) {
     $bitmap = New-Object System.Drawing.Bitmap $size, $size

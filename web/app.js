@@ -7,7 +7,7 @@
 
 import { auth, SpotifyPlayer } from './spotify.js';
 import { fetchLyrics, lrcToJizura } from './lyrics.js';
-import { hasNative, isWindows, NativePlayer } from './native.js';
+import { hasNative, NativePlayer } from './native.js';
 import { t, localizePage } from './i18n.js';
 
 localizePage();          // before anything below reads or replaces the page's text
@@ -558,33 +558,20 @@ class MockPlayer {
 }
 
 /**
- * The app window moves by a drag anywhere except the controls. On macOS the app takes the mouse
- * itself and is told where the controls are; on Windows the page sees the mouse first, and asks
- * the app to move the window once a press outside them has moved, so a click stays a click.
+ * The app window moves by a drag anywhere except the controls. WebView2 sees the mouse before the
+ * window does, so the page asks the app to move the window once a press outside them has moved;
+ * a click stays a click.
  */
 function watchDrag(native) {
-    if (isWindows()) {
-        let down = null;
-        window.addEventListener('pointerdown', (e) => {
-            down = e.button === 0 && !document.fullscreenElement && !e.target.closest('#bar, #help, #gate, #toast') ? [e.screenX, e.screenY] : null;
-        });
-        window.addEventListener('pointermove', (e) => {
-            if (!down || !(e.buttons & 1)) { down = null; return; }
-            if (Math.hypot(e.screenX - down[0], e.screenY - down[1]) > 3) { down = null; native.dragWindow(); }
-        });
-        window.addEventListener('pointerup', () => { down = null; });
-        return;
-    }
-    let last = '';
-    (function check() {
-        requestAnimationFrame(check);
-        const els = [];
-        if (!$('bar').hidden && !barHidden) els.push($('bar'));
-        if (!$('help').hidden) els.push($('help'));
-        const rects = els.map((el) => { const r = el.getBoundingClientRect(); return [r.x, r.y, r.width, r.height].map(Math.round); });
-        const key = JSON.stringify(rects);
-        if (key !== last) { last = key; native.setNoDrag(rects); }
-    })();
+    let down = null;
+    window.addEventListener('pointerdown', (e) => {
+        down = e.button === 0 && !document.fullscreenElement && !e.target.closest('#bar, #help, #gate, #toast') ? [e.screenX, e.screenY] : null;
+    });
+    window.addEventListener('pointermove', (e) => {
+        if (!down || !(e.buttons & 1)) { down = null; return; }
+        if (Math.hypot(e.screenX - down[0], e.screenY - down[1]) > 3) { down = null; native.dragWindow(); }
+    });
+    window.addEventListener('pointerup', () => { down = null; });
 }
 
 async function boot() {
@@ -592,7 +579,7 @@ async function boot() {
     wake();
     const q = new URLSearchParams(location.search);
     if (q.has('mock')) { player = new MockPlayer(q.get('mock'), Number(q.get('t')) || 0); showBar(); return; }
-    // Inside the macOS or Windows app: the players on this computer, no sign-in.
+    // Inside the Windows app: the players on this computer, no sign-in.
     if (hasNative()) {
         player = new NativePlayer();
         // A failed read is retried; once it succeeds, the bar goes back to what it said before.
