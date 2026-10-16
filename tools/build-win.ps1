@@ -1,9 +1,11 @@
 # Build the Windows app into build\win\jizura-sync.exe (x64, needs the .NET 10 Desktop Runtime and
 # the WebView2 Runtime, which Windows 11 has).
 #
-#   powershell -ExecutionPolicy Bypass -File tools/build-win.ps1
+#   powershell -ExecutionPolicy Bypass -File tools/build-win.ps1 [-Version 1.2.3]
 #
 # Needs the .NET 10 SDK. The first build downloads the WebView2 SDK package from NuGet.
+# -Version overrides the csproj's <Version> (the release workflow passes the tag).
+param([string]$Version)
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
@@ -20,7 +22,9 @@ foreach ($f in 'app.js', 'spotify.js', 'lyrics.js', 'native.js', 'i18n.js') {
 }
 
 if (Test-Path $out) { Remove-Item -Recurse -Force $out }
-dotnet publish (Join-Path $root 'win/jizura-sync.csproj') -c Release -r win-x64 --self-contained false -o $out -nologo -v quiet
+$props = @()
+if ($Version) { $props += "-p:Version=$Version" }
+dotnet publish (Join-Path $root 'win/jizura-sync.csproj') -c Release -r win-x64 --self-contained false -o $out -nologo -v quiet @props
 if ($LASTEXITCODE) { throw 'dotnet publish failed' }
 
 # Same selection as the Cloudflare deploy: the page loads only JIZURA's src/*.js.

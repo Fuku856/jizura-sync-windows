@@ -1,0 +1,68 @@
+# Publishing a release by hand on GitHub builds the Windows app and attaches it to that release.
+#
+# - A release must be created with Target: main, a pre-release with Target: dev. The job builds the
+#   release's tag, not the branch tip, so the zip, the tag and GitHub's "Source code" archives are
+#   the same commit; it fails if the tag is not on the branch its kind calls for.
+# - The tag is the version: v1.2.3 or v1.2.3-beta.1 (the exe's file version drops the suffix).
+# - GitHub runs this file as it is in the tagged commit, so the branch you tag must already have it.
+name: Release (Windows)
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.release.tag_name }}
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      TAG: ${{ github.event.release.tag_name }}
+      BRANCH: ${{ github.event.release.prerelease && 'dev' || 'main' }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: refs/tags/${{ github.event.release.tag_name }}
+          fetch-depth: 0
+          submodules: true
+
+      - name: Check tag and branch
+        shell: bash
+        run: |
+          if [[ ! "$TAG" =~ ^v?([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$ ]]; then
+            echo "::error::Tag '$TAG' is not a version (v1.2.3 or v1.2.3-beta.1)."
+            exit 1
+          fi
+          echo "VERSION=${BASH_REMATCH[1]}" >> "$GITHUB_ENV"
+          if ! git rev-parse -q --verify "refs/remotes/origin/$BRANCH" > /dev/null; then
+            echo "::error::Branch '$BRANCH' does not exist."
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor HEAD "origin/$BRANCH"; then
+            echo "::error::$TAG ($(git rev-parse --short HEAD)) is not on $BRANCH. Delete this release and its tag, then create it again with Target: $BRANCH."
+            exit 1
+          fi
+          if [[ "$(git rev-parse HEAD)" != "$(git rev-parse "origin/$BRANCH")" ]]; then
+            echo "::warning::$TAG is not the tip of $BRANCH ($(git rev-parse --short "origin/$BRANCH")); building the tag."
+          fi
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build
+        shell: powershell
+        run: powershell -ExecutionPolicy Bypass -File tools/build-win.ps1 -Version $env:VERSION
+
+      - name: Package and upload
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $zip = "jizura-sync-$env:TAG-win-x64.zip"
+          Compress-Archive -Path build/win/* -DestinationPath $zip
+          gh release upload $env:TAG $zip --clobber
