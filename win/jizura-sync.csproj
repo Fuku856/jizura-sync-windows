@@ -12,6 +12,8 @@
     <RootNamespace>JizuraSync</RootNamespace>
     <ApplicationIcon>app.ico</ApplicationIcon>
     <Product>jizura-sync</Product>
+    <Company>Fuku856</Company>
+    <Copyright>Copyright (c) 2026 Saqoosha, Fuku856</Copyright>
     <Version>1.0.2</Version>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>

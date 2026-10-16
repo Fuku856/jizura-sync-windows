@@ -4,7 +4,7 @@
 
 const API = 'https://lrclib.net/api';
 // LRCLIB asks clients to identify themselves; browsers may not set User-Agent, so it accepts this.
-const CLIENT = 'jizura-sync (https://github.com/Saqoosha/jizura-sync)';
+const CLIENT = 'jizura-sync-windows (https://github.com/Fuku856/jizura-sync-windows)';
 /** Longest Retry-After (s) we are willing to sit out before giving up on this track. */
 const MAX_RETRY_AFTER_S = 30;
 
