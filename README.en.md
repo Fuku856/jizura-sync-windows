@@ -48,7 +48,7 @@ A look is picked for each song automatically. Press the `R` key in the window to
 There is no Windows release yet, so build it from source. In PowerShell:
 
 ```powershell
-git clone --recursive -b windows https://github.com/Fuku856/jizura-sync.git
+git clone --recursive -b windows https://github.com/Fuku856/jizura-sync-windows.git
 cd jizura-sync
 powershell -ExecutionPolicy Bypass -File tools/build-win.ps1
 ```
@@ -121,14 +121,30 @@ In the devtools console, `jizuraSync.perf` shows the quality level, canvas size 
 
 Detailed notes on the code and design are in [AGENTS.md](AGENTS.md).
 
+<a id="setup"></a>
+
+### Web page for Spotify
+
+As upstream, the page in `web/` also runs in a browser on its own, following Spotify playing on any device through the Spotify Web API. It needs a Spotify **Premium** account and a free developer app (Client ID) of your own. It has nothing to do with the Windows app; skip this if you do not use it.
+
+1. Start the page with `./serve.sh` (`http://127.0.0.1:5180/`, needs bash).
+2. In the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard), choose **Create app**. Under **Redirect URIs**, add exactly `http://127.0.0.1:5180/` (with the trailing slash; `localhost` is rejected), check **Web API**, save, and copy the **Client ID**.
+3. Open <http://127.0.0.1:5180/>, paste the Client ID, then **Connect Spotify**.
+
+Other accounts, another port, your own hosting and Tesla's browser are covered in [upstream's README](https://github.com/Saqoosha/jizura-sync#web-page-for-spotify).
+
+**Spotify's and Apple's terms do not allow publishing an app like this** (Spotify Developer Policy III forbids synchronizing sound recordings with visual media, and Apple's MusicKit terms forbid synchronizing with other content). Create your own Client ID rather than reusing another project's, and do not host the web page as a service for others.
+
 ### Merging upstream
 
-To keep upstream merges clean, this fork leaves the Mac, Spotify web page and Tesla code in place (the Windows build does not use them).
+This repo is Windows-only: upstream's Mac app (`mac/`, Sparkle, and the signing, notarization and release scripts) was removed. The Spotify web page and the Tesla deploy stay, so upstream's `web/` changes still merge.
 
 ```powershell
 git fetch origin                # origin = Saqoosha/jizura-sync
 git merge origin/main
 ```
+
+An upstream change under `mac/` comes in as a modify/delete conflict; keep the deletion (resolve it with `git rm`).
 
 ### Updating JIZURA
 
@@ -148,4 +164,4 @@ The app is built on [jizura-sync](https://github.com/Saqoosha/jizura-sync) by [S
 
 ## License
 
-MIT, see [LICENSE](LICENSE). JIZURA is © 852wa, MIT licensed, and included as a submodule: see `web/vendor/JIZURA/LICENSE` and its `THIRD_PARTY_NOTICES.md`. The WebView2 SDK is under Microsoft's license and fetched from NuGet at build time. Lyrics are fetched at runtime from LRCLIB and are not part of this repository.
+MIT, see [LICENSE](LICENSE) (© Saqoosha, Fuku856). JIZURA is © 852wa, MIT licensed, and included as a submodule: see `web/vendor/JIZURA/LICENSE` and its `THIRD_PARTY_NOTICES.md`. The WebView2 SDK is under Microsoft's license and fetched from NuGet at build time. Lyrics are fetched at runtime from LRCLIB and are not part of this repository.

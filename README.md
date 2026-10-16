@@ -48,7 +48,7 @@ Windows で再生中の曲を、リアルタイムに歌詞モーションにす
 Windows 向けの配布ビルドはまだ無いので、ソースからビルドする。PowerShell で:
 
 ```powershell
-git clone --recursive -b windows https://github.com/Fuku856/jizura-sync.git
+git clone --recursive -b windows https://github.com/Fuku856/jizura-sync-windows.git
 cd jizura-sync
 powershell -ExecutionPolicy Bypass -File tools/build-win.ps1
 ```
@@ -121,14 +121,30 @@ powershell -ExecutionPolicy Bypass -File tools/build-win.ps1
 
 コードと設計の詳しいメモは [AGENTS.md](AGENTS.md) にある。
 
+<a id="setup"></a>
+
+### Spotify 用の Web ページ
+
+`web/` のページは、本家と同じくブラウザだけでも動く。Spotify Web API を通して、どのデバイスで再生している Spotify にも追従する。Spotify の **Premium** アカウントと、自分で作る無料の開発者アプリ（Client ID）が要る。Windows アプリには関係なく、使わないなら読まなくてよい。
+
+1. `./serve.sh` でページを起動する（`http://127.0.0.1:5180/`、bash が要る）
+2. [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) で **Create app**。**Redirect URIs** に `http://127.0.0.1:5180/` をそのまま入れ（末尾の `/` も要る。`localhost` は拒否される）、**Web API** にチェックして保存し、**Client ID** をコピーする
+3. <http://127.0.0.1:5180/> を開き、Client ID を貼って **Spotify に接続**
+
+ほかのアカウントで使う、ポートを変える、自分でホストする、Tesla のブラウザで使う、といった詳しい手順は [本家の README](https://github.com/Saqoosha/jizura-sync#web-page-for-spotify) にある。
+
+**Spotify と Apple の規約は、このような app の公開を認めていない**（Spotify Developer Policy III は音源と映像の同期を禁じ、Apple の MusicKit の規約も他のコンテンツとの同期を禁じている）。Client ID は自分で作り、ほかのプロジェクトのものを流用しないこと。Web ページを他人向けのサービスとしてホストしないこと。
+
 ### 本家の更新を取り込む
 
-このフォークは本家にマージしやすいよう、Mac・Spotify Web ページ・Tesla 向けのコードもそのまま残している（Windows のビルドには使わない）。
+このリポジトリは Windows 専用で、本家の Mac アプリ（`mac/`、Sparkle、署名・公証・リリースのスクリプト）は削除した。Spotify 用の Web ページと Tesla 向けのデプロイは残しているので、本家の `web/` の変更はそのまま取り込める。
 
 ```powershell
 git fetch origin                # origin = Saqoosha/jizura-sync
 git merge origin/main
 ```
+
+本家が `mac/` を変更していると、変更と削除の競合になる。そのときは削除のほうを残す（`git rm` で解決する）。
 
 ### JIZURA の更新
 
@@ -148,4 +164,4 @@ tools/update-jizura-scripts.sh      # web/index.html の <script> タグを作�
 
 ## ライセンス
 
-MIT（[LICENSE](LICENSE)）。JIZURA は © 852wa の MIT ライセンスで、submodule として含めている（`web/vendor/JIZURA/LICENSE` と `THIRD_PARTY_NOTICES.md`）。WebView2 SDK は Microsoft のライセンスで、ビルド時に NuGet から取得する。歌詞は実行時に LRCLIB から取得するもので、このリポジトリには含まれない。
+MIT（[LICENSE](LICENSE)、© Saqoosha, Fuku856）。JIZURA は © 852wa の MIT ライセンスで、submodule として含めている（`web/vendor/JIZURA/LICENSE` と `THIRD_PARTY_NOTICES.md`）。WebView2 SDK は Microsoft のライセンスで、ビルド時に NuGet から取得する。歌詞は実行時に LRCLIB から取得するもので、このリポジトリには含まれない。
