@@ -16,6 +16,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: read # release-notes reads each PR's description
 
 concurrency:
   group: release-${{ github.event.release.tag_name }}
@@ -71,8 +72,10 @@ jobs:
               echo "# 各 PR の説明"
               for n in $(grep -oE "github\.com/$REPO/pull/[0-9]+" changes.md | grep -oE '[0-9]+$' | sort -un); do
                 echo
+                # A PR that cannot be read only leaves its description out of the summary.
                 gh pr view "$n" --repo "$REPO" --json number,title,body \
-                  --jq '"## #\(.number) \(.title)\n\n\((.body // "")[:3000])"'
+                  --jq '"## #\(.number) \(.title)\n\n\((.body // "")[:3000])"' \
+                  || echo "::warning::Could not read PR #$n; summarising without its description." >&2
               done
             } > input.md
             summary=$(timeout 300 npx -y @anthropic-ai/claude-code@2.1.287 -p --model sonnet \
