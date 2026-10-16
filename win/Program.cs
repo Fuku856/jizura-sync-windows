@@ -16,7 +16,6 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
-using Windows.ApplicationModel;
 using Windows.Graphics.Imaging;
 using Windows.Media.Control;
 using Windows.Storage.Streams;
@@ -333,8 +332,19 @@ sealed class PlayerBridge
     string AppName(string id)
     {
         if (names.TryGetValue(id, out var name)) return name;
-        try { name = AppInfo.GetFromAppUserModelId(id).DisplayInfo.DisplayName; }
-        catch (Exception) { name = null; }
+        // The Start menu's name for the ID (shell:AppsFolder holds packaged and desktop apps alike),
+        // as WinRT's AppInfo.GetFromAppUserModelId gives it -- which would need a projection of most of
+        // Windows.ApplicationModel and Windows.Storage.
+        name = null;
+        if (SHCreateItemFromParsingName(@"shell:AppsFolder\" + id, IntPtr.Zero, typeof(IShellItem).GUID, out var item) == 0)
+        {
+            if (item.GetDisplayName(0 /* SIGDN_NORMALDISPLAY */, out var text) == 0)
+            {
+                name = Marshal.PtrToStringUni(text);
+                Marshal.FreeCoTaskMem(text);
+            }
+            Marshal.ReleaseComObject(item);
+        }
         if (string.IsNullOrEmpty(name))
         {
             name = id.Split('!')[0];                            // Publisher.App_hash!App → Publisher.App_hash
@@ -343,6 +353,17 @@ sealed class PlayerBridge
             name = name.Split('.').Last();                       // SpotifyAB.SpotifyMusic → SpotifyMusic
         }
         return names[id] = name;
+    }
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    static extern int SHCreateItemFromParsingName(string path, IntPtr bindContext, [MarshalAs(UnmanagedType.LPStruct)] Guid iid, out IShellItem item);
+
+    [ComImport, Guid("43826d1e-e718-42ee-bc55-a1e261c37bfe"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IShellItem
+    {
+        void BindToHandler();                                   // unused slots keep the vtable order
+        void GetParent();
+        [PreserveSig] int GetDisplayName(int sigdn, out IntPtr name);
     }
 
     /** The cover as a small JPEG data URL; the bar shows it at 64 px. */

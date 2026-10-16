@@ -53,7 +53,7 @@ cd jizura-sync
 powershell -ExecutionPolicy Bypass -File tools/build-win.ps1
 ```
 
-This makes `build\win\jizura-sync.exe`; run it. You can move the whole `build\win` folder anywhere (the `web` folder must stay next to the exe).
+This makes `build\win\jizura-sync.exe`; run it. You can move the whole `build\win` folder anywhere (`WebView2Loader.dll` and the `web` folder must stay next to the exe).
 
 Cloned without `--recursive`? Run `git submodule update --init` before building.
 

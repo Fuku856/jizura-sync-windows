@@ -53,7 +53,7 @@ cd jizura-sync
 powershell -ExecutionPolicy Bypass -File tools/build-win.ps1
 ```
 
-`build\win\jizura-sync.exe` ができるので、それを起動する。`build\win` フォルダごと好きな場所に移してよい（`web` フォルダが exe の隣に要る）。
+`build\win\jizura-sync.exe` ができるので、それを起動する。`build\win` フォルダごと好きな場所に移してよい（`WebView2Loader.dll` と `web` フォルダが exe の隣に要る）。
 
 `--recursive` を付けずに clone したときは `git submodule update --init` を実行してからビルドする。
 
