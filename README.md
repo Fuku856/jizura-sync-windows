@@ -1,146 +1,151 @@
-# jizura-sync
+# jizura-sync for Windows
 
-A Mac app that turns the song playing in Spotify or the Music app into real-time lyric motion.
+Windows で再生中の曲を、リアルタイムに歌詞モーションにするアプリ。
 
-jizura-sync follows what Spotify or Music is playing on your Mac, fetches time-synced lyrics from [LRCLIB](https://lrclib.net), and renders them with [JIZURA](https://github.com/852wa/JIZURA), an engine that assembles lyric videos (文字PV) from hundreds of small layout, motion and decoration parts.
+この PC で再生中の曲を Windows のメディア操作（音量フライアウトに出るもの）から追い、同期歌詞を [LRCLIB](https://lrclib.net) から取って、[JIZURA](https://github.com/852wa/JIZURA) で描く。JIZURA は、数百の小さな部品（レイアウト・動き・装飾）を組み合わせて文字PVを組み立てるエンジン。Spotify、Apple Music、ブラウザのタブ（YouTube など）、そのほか Windows のメディア操作に出るプレイヤーなら何でも追える。
 
-jizura-sync picks a look for each song automatically. Press the `R` key in its window to switch to a different one.
+見た目は曲ごとに自動で選ばれる。ウィンドウで `R` キーを押すと、別の見た目に変わる。
 
-[日本語](README.ja.md)
+> **これは [Saqoosha/jizura-sync](https://github.com/Saqoosha/jizura-sync)（macOS アプリ）の非公式フォーク**で、Windows 版を追加したもの。本家の作者とは関係がなく、本家に Windows 版の問い合わせをしないこと。macOS 版は [本家](https://github.com/Saqoosha/jizura-sync) を使う。
+>
+> **個人のプロジェクトで、サービスではない**。歌詞は LRCLIB から取っていて、許諾を得ていない。これで作ったものを共有する前に、[免責事項](#免責事項)を読むこと。
 
-> **A personal project, not a service.** The lyrics come from LRCLIB and are not licensed. Read the [disclaimer](#disclaimer) before sharing what you make with it.
+[English](README.en.md)
 
-## Install
+## 本家との違い
 
-jizura-sync is tested on macOS 27. It is built for macOS 14 and later, but versions before 27 have not been tried.
+| | 本家（macOS） | このフォーク（Windows） |
+|---|---|---|
+| 対応 OS | macOS 14 以降 | Windows 10 (2004) 以降 / Windows 11 |
+| 追えるプレイヤー | Spotify とミュージックApp だけ | Windows のメディア操作に出るものすべて（Spotify、Apple Music、ブラウザのタブ、その他） |
+| 再生状態の取得 | Apple Events | Windows のメディアセッション（GSMTC） |
+| 権限の許可 | 初回にオートメーションの許可が要る | 不要 |
+| 配布 | 公証済みビルド、自動アップデート | ソースからビルド（インストーラー・自動アップデートは未対応） |
 
-1. Download `jizura-sync-<version>.zip` from [Releases](https://github.com/Saqoosha/jizura-sync/releases) and unzip it.
-2. Move **jizura-sync.app** to Applications and open it. Builds there are notarized, so macOS opens them without a warning.
-3. Play a song in Spotify or the Music app. The first time jizura-sync reads one of them, macOS asks whether it may control that app; allow it. To change the answer later: System Settings → Privacy & Security → Automation.
+### Windows 版で追加・改善したこと
 
-jizura-sync checks for new versions itself; **jizura-sync → Check for Updates…** checks now.
+- **どのプレイヤーにも追従**: Spotify と Apple Music に限らず、ブラウザで再生している曲にも追従する。再生中のセッションを優先し、何も再生していない間は最後に追っていたものに留まる。バーの再生 / 一時停止・前へ / 次へ・シークは、追っているプレイヤーに送られる
+- **描画品質の自動調整**（本家にない機能）: JIZURA のカットの中には、1 フレームの時間を大きく超えるもの（円柱・グリッチグリッド系など）がある。フレームが遅れ始めると、ぼかし・ブルームを省く → 解像度を 0.75 倍 → 色ずれの残像を省く → 解像度を 0.5 倍 → 30 fps、の順に 1 段ずつ軽くし、3 秒間遅れがなければ 1 段戻す。計測では、重いカットが 18 fps から 68 fps まで回復した。120 Hz などの高リフレッシュレートのディスプレイでも、描くのは plan の 60 fps の刻みだけにして無駄を省く
+- **トランジションの描画を軽く**: カット切り替えのたびに前のカットの静止画を毎フレーム描き直していたのを、同じ絵なので使い回すようにした。キャンバスを不透明にして合成の手間も減らした
+- **ジャケットが後から届いても表示**: ブラウザなどは曲名より後にジャケット画像を出すので、届いた時点でバーに反映する
+- **シーク直後にスライダーが戻らない**: ブラウザはシークを少し遅れて反映するので、反映されるまで（最大 1 秒）古い位置の読み取りを無視する
+- **ページのドラッグでウィンドウを移動**: 下のバー以外をドラッグすると、Windows 標準の移動になる（3 px 以上動かしたときだけ。クリックはクリックのまま）
+- **ウィンドウの位置と大きさを記憶**し、次回も同じ場所に開く
+- **ダークモードのタイトルバー**とアプリアイコン
+- **外部リンクは既定のブラウザで開く**（アプリ内では開かない）
+- 最小化中は描画も読み取りも止まり、CPU を使わない
 
-## Using it
+## 必要なもの
 
-- It follows whichever of Spotify and the Music app is playing, and switches when you start the other one. It follows only playback on this Mac.
-- Resize the window freely; when you let go, it snaps to the nearest shape JIZURA draws (16:9, 9:16, 4:3, 3:4, 1:1, 4:5, 21:9), keeping its size and the edges you did not drag, so the picture fills the window.
-- Drag anywhere in the window to move it, except on the bar at the bottom.
-- When a song shows no lyrics, the middle of the window says why: not found, not time-synced, instrumental, the lookup failed, or a stream (radio) with no song position to time them to.
-- The display stays awake while a song plays in a visible window.
-- The app is in Japanese when macOS is.
+- Windows 10 バージョン 2004 以降、または Windows 11（x64）
+- [.NET 10 SDK](https://dotnet.microsoft.com/download)（ビルド用。実行だけなら .NET 10 Desktop Runtime）
+- [Node.js](https://nodejs.org/)（ビルド時のページの構文チェック用）
+- [Git](https://git-scm.com/)
+- WebView2 Runtime（Windows 11 には最初から入っている。無い場合は [Microsoft のページ](https://developer.microsoft.com/microsoft-edge/webview2/) から入れる）
 
-The bar at the bottom shows the cover art, the track, and play / pause, previous / next and seek for the player. Press `?` or the `?` button for these controls:
+## インストール
 
-| Key | |
-|---|---|
-| Click, `H` | Hide / show the bar (remembered). Errors still appear briefly while it is hidden |
-| `R` | Switch to a different look: style, mood, colours, fonts and the parts used |
-| `U` | Same style within each song section (on, the default) or every line styled on its own (off) |
-| `K` | Motion: as the look picks → smooth → choppy 12 fps → choppier 8 fps, like hand-drawn animation |
-| `[` / `]` | Lyrics 50 ms later / earlier, when they run ahead of or behind the song (remembered) |
-| `Space` | Play / pause |
-| `F`, double-click | Fullscreen |
-| `?`, `Esc` | Open / close the help |
-
-## Limitations
-
-- Lyrics are only as good as LRCLIB's community data. Some tracks have none, or only unsynced text, or none within a few seconds of the track's length; those show the title card and say why.
-- Radio stations and live streams have no position within a song, so they get no lyrics.
-- There is no beat sync. JIZURA can snap cuts to beats detected from audio, but jizura-sync cannot read the player's audio.
-- Fonts load from Google Fonts on demand, so the first songs need a network connection to look right.
-
-## Disclaimer
-
-This project is a personal experiment. It is not affiliated with, endorsed by, or supported by Spotify, Apple, LRCLIB or the JIZURA author. It is provided as is, without warranty (see [LICENSE](LICENSE)). Whoever runs it is responsible for how they use it.
-
-- **The lyrics are not licensed.** Lyrics are copyrighted works of their writers and publishers. LRCLIB's lyrics are contributed by its users, and neither LRCLIB nor this project has cleared them with the rights holders. This project holds no rights to any lyrics; it fetches them at runtime and does not store or redistribute them.
-- **The app uses no music service API.** It reads the Spotify and Music apps on the same Mac over Apple Events. That does not license anything: the recordings are still Spotify's and Apple's to license.
-
-## For developers
-
-### Build from source
-
-```bash
-git clone --recursive https://github.com/Saqoosha/jizura-sync.git
-cd jizura-sync
-tools/build-mac.sh                    # build/jizura-sync.app, ad-hoc signed for this Mac
-open build/jizura-sync.app
-```
-
-It needs Xcode 26 or later (for `actool`, which compiles the icon); there is no Xcode project. The first build downloads Sparkle into `build/`. Already cloned without `--recursive`? Run `git submodule update --init`.
-
-### Windows app
-
-There is no release for Windows yet; build it from source on Windows 10 (2004) or later. It needs the [.NET 10 SDK](https://dotnet.microsoft.com/download) and Node.js (for a syntax check of the page), and runs on the WebView2 Runtime that Windows 11 already has.
+Windows 向けの配布ビルドはまだ無いので、ソースからビルドする。PowerShell で:
 
 ```powershell
-git clone --recursive https://github.com/Saqoosha/jizura-sync.git
+git clone --recursive -b windows https://github.com/Fuku856/jizura-sync.git
 cd jizura-sync
-powershell -ExecutionPolicy Bypass -File tools/build-win.ps1   # build\win\jizura-sync.exe
-build\win\jizura-sync.exe
+powershell -ExecutionPolicy Bypass -File tools/build-win.ps1
 ```
 
-- It follows whatever plays on this PC through Windows' media controls (the media flyout by the volume control): Spotify, Apple Music, a browser tab, and other players. A session that is playing wins; while nothing plays it stays on the one it followed last. Play / pause, previous / next and seek in the bar go back to that player.
-- A browser tab without a song length (a live stream, or a page that sets no media position) shows the "no song position" notice, and so do players that report none.
-- Window snapping, dragging the page to move the window, fullscreen and keeping the display awake work as on the Mac. The window has a normal Windows title bar.
-- There is no installer, auto-update or code signing yet.
+`build\win\jizura-sync.exe` ができるので、それを起動する。`build\win` フォルダごと好きな場所に移してよい（`web` フォルダが exe の隣に要る）。
 
-### How it works
+`--recursive` を付けずに clone したときは `git submodule update --init` を実行してからビルドする。
 
-- **Playback.** The app reads Spotify's and Music's player state and position over Apple Events, addressed to each app's process so that a player you just quit is never relaunched. Both apps announce a track change, play and pause, and the app reads right away; neither announces a seek, so while a song plays it also reads once a second. Paused, idle or hidden, it sends nothing.
-- **Lyrics.** Lyrics come from LRCLIB's synced LRC files, matched by artist, title and duration; a lookup that hits an LRCLIB outage is retried twice. LRC is close to JIZURA's own lyric format, so the conversion only escapes JIZURA's markup characters and marks song sections. A section starts at a blank line, a long pause, or a repeated block such as a chorus. Sections shorter than 3 lines are merged and sections longer than 8 lines are split, because the unify mode picks its parts per section.
-- **Rendering.** The window is a web view running the page in `web/`. JIZURA builds a plan for the whole song once (cuts, parts, effects), and its renderer is a pure function of time. Each animation frame draws the plan at the current playback position, so seeking and pausing need no extra state, and a paused frame is not drawn again.
+起動したら、Spotify や Apple Music、ブラウザで曲を再生する。権限の許可は要らない。
 
-### Web page for Spotify
+## 使い方
 
-The same page also runs in a browser on its own, following Spotify playing on any device (phone, desktop, speaker) through the Spotify Web API. It is for people who can set up their own Spotify developer app: it needs a Spotify **Premium** account and a free developer app (Client ID), about five minutes of setup. It runs entirely in the browser, with no server of ours; the Spotify tokens and settings stay in the page's local storage and go only to Spotify.
+- 再生中のプレイヤーを自動で追い、別のプレイヤーで再生を始めればそちらに切り替わる
+- ウィンドウは自由にリサイズできる。手を離すと、JIZURA が描ける形（16:9、9:16、4:3、3:4、1:1、4:5、21:9）のうち一番近いものに合わせる。大きさと、ドラッグしなかった辺は保つ
+- 下のバー以外なら、ウィンドウのどこをドラッグしても動かせる
+- 歌詞が出ない曲では、理由をウィンドウの中央に出す：見つからない、タイミング付きでない、インストゥルメンタル、検索に失敗した、曲の中の位置がない（ライブ配信など）
+- 見えているウィンドウで曲を再生している間は、ディスプレイをスリープさせない
+- Windows の表示言語が日本語なら、日本語で表示する
 
-1. Start the page:
+画面下のバーに、ジャケット・曲名と、再生 / 一時停止・前へ / 次へ・シークがある。`?` キーかバーの `?` ボタンで、次の操作一覧が開く。
 
-   ```bash
-   ./serve.sh            # http://127.0.0.1:5180/
-   ```
+| キー | |
+|---|---|
+| クリック、`H` | バーを隠す / 出す（記憶される）。隠していてもエラーは短く表示される |
+| `R` | 別の見た目に変える（スタイル・雰囲気・色・書体・使う部品） |
+| `U` | 曲のセクション内で見せ方をそろえる（オン、既定）か、行ごとにばらばらに選ぶ（オフ） |
+| `K` | 動き: 見た目まかせ → なめらか → カクカク 12 fps → もっとカクカク 8 fps（手描きアニメのコマ打ち） |
+| `[` / `]` | 歌詞が曲より先走る・遅れるときに、50 ms 遅らせる / 早める（記憶される） |
+| `Space` | 再生 / 一時停止 |
+| `F`、ダブルクリック | 全画面 |
+| `?`、`Esc` | ヘルプを開く / 閉じる |
 
-2. Create a Spotify app:
-   1. Open the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) and choose **Create app**.
-   2. Fill in any name and description.
-   3. Under **Redirect URIs**, add exactly `http://127.0.0.1:5180/`, including the trailing slash. Spotify accepts the loopback IP but rejects `localhost`.
-   4. Under **Which API/SDKs are you planning to use?**, check **Web API**, then save.
-   5. Open the app's **Settings** and copy the **Client ID**. It is a public identifier, not a secret; the sign-in uses PKCE, so there is no client secret anywhere.
+## 制限
 
-3. Open <http://127.0.0.1:5180/>, paste the Client ID, then **Connect Spotify**. The setup screen shows the Redirect URI the page expects, so you can check it against your app. Play something on Spotify on any device and the lyrics follow it.
+- 歌詞の質は LRCLIB のデータ次第。歌詞が無い曲、同期していない歌詞しか無い曲、長さが 4 秒以上ずれた歌詞しか無い曲は、タイトルだけの画面になり、理由を表示する
+- 曲の長さを出さないもの（ライブ配信、再生位置を出さないページ、長さを出さないプレイヤー）は「曲の中の位置がない」と表示し、歌詞は出ない
+- ブラウザのタブは、ページが曲名・アーティスト・再生位置を Windows に渡している場合だけ正しく追える。一時停止中の位置は、ページが最後に報告したものになる
+- 拍への同期は無い。JIZURA は音声から拍を検出してカットを合わせられるが、jizura-sync はプレイヤーの音声を読めない
+- 書体は Google Fonts から必要な分だけ読み込む。最初の数曲は、ネットにつながっていないと本来の見た目にならない
+- Spotify for Windows と Apple Music for Windows での動作はまだ確認していない（開発機に入っていなかった）。ブラウザのタブでは確認済み
+- インストーラー、自動アップデート、コード署名はまだ無い
 
-**Disconnect Spotify** at the bottom of the help forgets the tokens; [spotify.com/account/apps](https://www.spotify.com/account/apps/) revokes access completely. `?mock` plays a fixed song on a local clock with no Spotify at all; `?mock=Artist|Title|durationMs` picks another song, and `&t=30` starts 30 s in.
+## 免責事項
 
-Spotify does not push player state to web apps, so the page polls `GET /me/player` once a second and extrapolates the position in between. Each reading is anchored at the midpoint of its request's round trip.
+このプロジェクトは個人の実験。Spotify・Apple・Microsoft・LRCLIB・JIZURA の作者・本家 jizura-sync の作者とは関係がなく、承認も支援も受けていない。無保証で提供する（[LICENSE](LICENSE) を参照）。どう使うかは、動かす人の責任。
 
-- **Other accounts.** A new Spotify app is in *development mode*: up to 5 Spotify accounts can use it, and each must be added under the app's **User Management**. An account that is not on the list gets `403` on every call; the page tells you when that happens.
-- **Another port.** `PORT=8080 ./serve.sh`, then register `http://127.0.0.1:8080/` instead.
-- **Your own hosting** (GitHub Pages or any static host): serve `web/`, including the submodule, and register the page's exact `https://` URL as a Redirect URI. The URI is the page address without query or hash, and the setup screen shows it.
-- **A device without a keyboard** (a car's browser): `SPOTIFY_CLIENT_ID=<id> tools/deploy-cloudflare.sh` deploys `web/` to your own Cloudflare account with your Client ID filled in, so there is nothing to type. In Tesla's browser the keys in the help are tap buttons; `?tesla` shows them in any browser. Keep the deployment to your own devices.
+- **歌詞は許諾を得ていない**。歌詞は作詞者と音楽出版社の著作物。LRCLIB の歌詞は利用者が投稿したもので、LRCLIB もこのプロジェクトも権利者の許諾を得ていない。このプロジェクトは歌詞の権利を一切持たない。歌詞は実行時に取得するだけで、保存も再配布もしない
+- **音楽サービスの API は使わない**。同じ PC で再生中の曲の情報を、Windows のメディアセッションから読むだけ。ただし、それで何かの許諾が得られるわけではない。音源の権利は変わらず各サービスと権利者の側にある
 
-### Terms for the web page
+## 開発者向け
 
-- **Spotify does not allow publishing an app like this.** Using the Web API makes you a Spotify developer, bound by the [Spotify Developer Terms](https://developer.spotify.com/terms) and [Developer Policy](https://developer.spotify.com/policy). Section III of the policy says: "Do not synchronize any sound recordings with any visual media, including any advertising, film, television program, slideshow, video, or similar content." Lyric motion timed to the playing track is that kind of synchronization. Whoever runs a copy of the web page creates their own Spotify app for it; the policy requires separate credentials for each app, so do not reuse another project's Client ID. That app can be used by at most 5 Spotify accounts in development mode, each registered on it, and those accounts share its Client ID.
-- **Apple Music does not allow it either,** which is why the web page has no Apple Music version. The Apple Developer Program License Agreement says of MusicKit: "MusicKit Content cannot be synchronized with any other content, unless otherwise permitted by Apple in the Documentation." The Mac app does not use MusicKit.
-- **Do not host the web page as a service for others.** Keep a deployment to yourself and the accounts registered on your own Spotify app.
+### デバッグ用の環境変数
 
-### Updating JIZURA
+`build\win\jizura-sync.exe` を次の環境変数付きで起動できる。
+
+| 変数 | |
+|---|---|
+| `JIZURA_WEB_ROOT=<リポジトリ>\web` | ビルドに含めたページではなく、チェックアウトの `web/` を読む。編集して `F5` で再読み込み |
+| `JIZURA_QUERY=mock=Artist\|Title\|durationMs&t=30` | プレイヤーなしで、固定の曲をページ内の時計で再生する。`quality=N` で描画品質を段階 N（0〜5）に固定 |
+| `JIZURA_LOG=<ファイル>` | 読み取りとセッションのイベントをすべて記録する |
+| `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333` | ページに CDP でつなげる（`http://127.0.0.1:9333/json`） |
+
+開発者ツールのコンソールでは `jizuraSync.perf` で描画品質の段階・キャンバスの大きさ・フレーム時間、`jizuraSync.plan` / `.song` で現在の plan と歌詞を見られる。
+
+### 仕組み
+
+- **再生状態**: Windows の Global System Media Transport Controls（音量フライアウトと同じセッション）から、曲名・アーティスト・ジャケット・再生位置・再生状態を読む。曲・再生状態・再生位置が変わったという通知のたびにすぐ読み、再生中は 1 秒ごとにも読む。一時停止中や再生なしのときは通知を待つだけ。セッションは別プロセスのものなので、各呼び出しに 2 秒のタイムアウトを付けている
+- **歌詞**: LRCLIB の同期歌詞（LRC）を、アーティスト・曲名・長さで引く。LRCLIB が一時的に落ちているときは 2 回まで再試行する。LRC は JIZURA の歌詞記法にほぼそのまま渡せるので、変換で行うのは JIZURA の記号のエスケープと、セクションの区切りだけ
+- **描画**: ウィンドウは WinForms + WebView2 で、中身は `web/` のページ。ページは `https://app.jizura-sync.test/` の仮想ホストで配信する（この origin がページの localStorage を持つので変えないこと）。JIZURA は曲全体の plan を 1 回だけ作り、レンダラは時刻の純関数なので、毎フレーム現在の再生位置の瞬間を描くだけで同期する
+
+コードと設計の詳しいメモは [AGENTS.md](AGENTS.md) にある。
+
+### 本家の更新を取り込む
+
+このフォークは本家にマージしやすいよう、Mac・Spotify Web ページ・Tesla 向けのコードもそのまま残している（Windows のビルドには使わない）。
+
+```powershell
+git fetch origin                # origin = Saqoosha/jizura-sync
+git merge origin/main
+```
+
+### JIZURA の更新
 
 ```bash
 git -C web/vendor/JIZURA fetch --depth 1 origin main
 git -C web/vendor/JIZURA checkout FETCH_HEAD
-tools/update-jizura-scripts.sh      # regenerates the <script> tags in web/index.html
+tools/update-jizura-scripts.sh      # web/index.html の <script> タグを作り直す（bash が要る）
 ```
 
-The page loads JIZURA's `src/*.js` directly, in filename order, and skips `src/12_ui.js`, which is JIZURA's editor UI.
+ページは JIZURA の `src/*.js` をファイル名順に直接読み込む。エディタ UI の `src/12_ui.js` は読まず、Windows のビルドではさらに音声解析の `10_audio.js` と書き出しの `11_export.js` も外す。
 
-## Acknowledgements
+## 謝辞
 
-All of the lyric motion is [JIZURA](https://github.com/852wa/JIZURA) by [852wa](https://github.com/852wa). This project only feeds it the playing track's position and lyrics. Every layout, motion, decoration and random look on screen is JIZURA's work, and it is published under the MIT license, which made this experiment possible. Thank you. You can try the original, with its editor and video export, at <https://852wa.github.io/JIZURA/>.
+歌詞モーションはすべて、[852wa](https://github.com/852wa) さんの [JIZURA](https://github.com/852wa/JIZURA) によるもの。画面に出るレイアウト・動き・装飾・ランダムな見た目は、どれも JIZURA の仕事。エディタや動画書き出しを備えた本家は <https://852wa.github.io/JIZURA/> で試せる。
 
-The app updates itself with [Sparkle](https://sparkle-project.org) (MIT).
+アプリの土台は [Saqoosha](https://github.com/Saqoosha) さんの [jizura-sync](https://github.com/Saqoosha/jizura-sync)。このフォークは、それに Windows のホストと描画の改善を足したもの。どちらも MIT ライセンスで公開されていたから、この Windows 版を作れた。感謝。
 
-## License
+## ライセンス
 
-MIT, see [LICENSE](LICENSE). JIZURA is © 852wa, MIT licensed, and included as a submodule: see `web/vendor/JIZURA/LICENSE` and its `THIRD_PARTY_NOTICES.md`. Sparkle is © the Sparkle Project, MIT licensed, and bundled in the app. Lyrics are fetched at runtime from LRCLIB and are not part of this repository.
+MIT（[LICENSE](LICENSE)）。JIZURA は © 852wa の MIT ライセンスで、submodule として含めている（`web/vendor/JIZURA/LICENSE` と `THIRD_PARTY_NOTICES.md`）。WebView2 SDK は Microsoft のライセンスで、ビルド時に NuGet から取得する。歌詞は実行時に LRCLIB から取得するもので、このリポジトリには含まれない。
