@@ -1,4 +1,4 @@
-// UI text in English or Japanese, following the browser's (or the macOS app's) language. Keys are
+// UI text in English or Japanese, following the browser's (or the Windows app's) language. Keys are
 // the English text; `{name}` is filled from `vars`. A key missing from JA shows in English.
 
 const JA = {
@@ -21,13 +21,10 @@ const JA = {
     'Spotify rate limit — backing off': 'Spotify のレート制限中です。間隔をあけて再試行します',
     'Nothing is playing on Spotify': 'Spotify で何も再生していません',
 
-    // playback from the macOS app
-    'Music': 'ミュージックApp',
-    'Open Spotify or Music and play a song': 'Spotify かミュージックApp で曲を再生してください',
+    // playback from the Windows app
+    'Play a song in Spotify, Apple Music or a browser': 'Spotify、Apple Music またはブラウザで曲を再生してください',
     'Nothing is playing in {apps}': '{apps}で何も再生していません',
     ' or ': 'と',
-    'Allow jizura-sync to control {app} in System Settings → Privacy & Security → Automation':
-        'システム設定 →「プライバシーとセキュリティ」→「オートメーション」で、jizura-sync に{app}の操作を許可してください',
     'Could not read {app}: {detail}': '{app}を読み取れませんでした: {detail}',
     'Could not read the current track from {app}': '{app}の再生中の曲を読み取れませんでした',
 
