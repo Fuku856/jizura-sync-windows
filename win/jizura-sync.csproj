@@ -2,9 +2,9 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <!-- 19041 (Windows 10 2004): media session manager, AppInfo.GetFromAppUserModelId -->
-    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
-    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <!-- No Windows version in the TFM: with one, the SDK references its projection of the whole
+         Windows API (Microsoft.Windows.SDK.NET.dll, 25 MB). The WinRT types used are projected below. -->
+    <TargetFramework>net10.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -16,10 +16,44 @@
     <Copyright>Copyright (c) 2026 Saqoosha, Fuku856</Copyright>
     <Version>1.0.2</Version>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- The release zip holds the exe, WebView2Loader.dll and web/: managed assemblies go into the exe,
+         the line-number info into the assembly, and the packages' API docs nowhere. -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <DebugType>embedded</DebugType>
+    <PublishReferencesDocumentationFiles>false</PublishReferencesDocumentationFiles>
+    <!-- The package also copies its loader to runtimes\win-x64\native\ (for .NET Framework); the one
+         next to the exe is the one .NET loads. -->
+    <WebView2NeverCopyLoaderDllToOutputDirectory>true</WebView2NeverCopyLoaderDllToOutputDirectory>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
+    <PackageReference Include="Microsoft.Windows.CsWinRT" Version="2.3.1" />
+    <!-- Only its .winmd files, as projection input: no Windows SDK needs to be installed. -->
+    <PackageReference Include="Microsoft.Windows.SDK.Contracts" Version="10.0.19041.2" ExcludeAssets="all" GeneratePathProperty="true" />
+  </ItemGroup>
+
+  <!-- 19041 (Windows 10 2004): media session manager. SupportedOSPlatformVersion cannot exceed the TFM's
+       version, so the attribute it would generate is written here. -->
+  <PropertyGroup>
+    <GenerateSupportedOSPlatformAttribute>false</GenerateSupportedOSPlatformAttribute>
+  </PropertyGroup>
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.Versioning.SupportedOSPlatformAttribute">
+      <_Parameter1>windows10.0.19041.0</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <!-- The WinRT the app uses: media sessions, cover decoding and the streams around them, plus what they
+       reference. The excludes would pull in Windows.Storage and Windows.System (file-backed streams,
+       Foundation.Diagnostics' log files), which is most of the Windows API again. -->
+  <PropertyGroup>
+    <CsWinRTIncludes>Windows.Media.Control;Windows.Media.MediaPlaybackType;Windows.Media.MediaPlaybackAutoRepeatMode;Windows.Graphics.Imaging;Windows.Graphics.DirectX;Windows.Storage.Streams;Windows.Foundation</CsWinRTIncludes>
+    <CsWinRTExcludes>Windows.Foundation.Diagnostics;Windows.Storage.Streams.FileRandomAccessStream;Windows.Storage.Streams.FileInputStream;Windows.Storage.Streams.FileOutputStream;Windows.Storage.Streams.RandomAccessStreamReference;Windows.Storage.Streams.IFileRandomAccessStreamStatics;Windows.Storage.Streams.IRandomAccessStreamReferenceStatics</CsWinRTExcludes>
+  </PropertyGroup>
+  <ItemGroup>
+    <CsWinRTInputs Include="$(PkgMicrosoft_Windows_SDK_Contracts)\ref\netstandard2.0\Windows.Foundation.FoundationContract.winmd" />
+    <CsWinRTInputs Include="$(PkgMicrosoft_Windows_SDK_Contracts)\ref\netstandard2.0\Windows.Foundation.UniversalApiContract.winmd" />
   </ItemGroup>
 
   <!-- The package also references its WPF control, which conflicts with WinForms' WindowsBase (MSB3277). -->
