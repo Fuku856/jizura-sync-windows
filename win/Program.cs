@@ -1,5 +1,5 @@
 // jizura-sync for Windows: the web app in WebView2, fed by the media sessions Windows keeps for
-// every player (Spotify, Apple Music, a browser tab ...) instead of the Spotify Web API.
+// every player (Spotify, Apple Music, a browser tab ...).
 //
 // Playback comes from the Global System Media Transport Controls -- the same sessions the volume
 // flyout shows: title, artist, cover, timeline and play state, plus play / pause / next / previous
@@ -16,7 +16,6 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
-using Windows.ApplicationModel;
 using Windows.Graphics.Imaging;
 using Windows.Media.Control;
 using Windows.Storage.Streams;
@@ -333,8 +332,20 @@ sealed class PlayerBridge
     string AppName(string id)
     {
         if (names.TryGetValue(id, out var name)) return name;
-        try { name = AppInfo.GetFromAppUserModelId(id).DisplayInfo.DisplayName; }
-        catch (Exception) { name = null; }
+        // The Start menu's name for the ID (shell:AppsFolder holds packaged and desktop apps alike),
+        // as WinRT's AppInfo.GetFromAppUserModelId gives it -- which would need a projection of most of
+        // Windows.ApplicationModel and Windows.Storage.
+        name = null;
+        // An empty ID would name shell:AppsFolder itself ("Applications").
+        if (id.Length > 0 && SHCreateItemFromParsingName(@"shell:AppsFolder\" + id, IntPtr.Zero, typeof(IShellItem).GUID, out var item) == 0)
+        {
+            if (item.GetDisplayName(0 /* SIGDN_NORMALDISPLAY */, out var text) == 0)
+            {
+                name = Marshal.PtrToStringUni(text);
+                Marshal.FreeCoTaskMem(text);
+            }
+            Marshal.ReleaseComObject(item);
+        }
         if (string.IsNullOrEmpty(name))
         {
             name = id.Split('!')[0];                            // Publisher.App_hash!App → Publisher.App_hash
@@ -343,6 +354,17 @@ sealed class PlayerBridge
             name = name.Split('.').Last();                       // SpotifyAB.SpotifyMusic → SpotifyMusic
         }
         return names[id] = name;
+    }
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    static extern int SHCreateItemFromParsingName(string path, IntPtr bindContext, [MarshalAs(UnmanagedType.LPStruct)] Guid iid, out IShellItem item);
+
+    [ComImport, Guid("43826d1e-e718-42ee-bc55-a1e261c37bfe"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IShellItem
+    {
+        void BindToHandler();                                   // unused slots keep the vtable order
+        void GetParent();
+        [PreserveSig] int GetDisplayName(int sigdn, out IntPtr name);
     }
 
     /** The cover as a small JPEG data URL; the bar shows it at 64 px. */
@@ -489,7 +511,61 @@ sealed class MainForm : Form
                 PostMessage(Handle, WM_NCLBUTTONDOWN, HTCAPTION, (IntPtr)((p.Y << 16) | (p.X & 0xFFFF)));
                 break;
             case "play" or "pause" or "next" or "previous" or "seek": bridge.Command(cmd, body); break;
+            case "http": Fetch((JsonObject)body); break;
         }
+    }
+
+    /** Lyric catalogues the page may reach through Fetch: ones that send no CORS headers (web/lyrics.js). */
+    static readonly HashSet<string> HttpHosts = ["music.163.com"];
+    static readonly HttpClient http = CreateHttpClient();
+
+    static HttpClient CreateHttpClient()
+    {
+        // No redirects: HttpHosts is checked on the URL the page asked for, and a redirect would lead past it.
+        var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(10), MaxResponseContentBufferSize = 4 << 20 };
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36");
+        return client;
+    }
+
+    /**
+     * Page → native `{cmd: 'http', id, url, form?}` (native.js `nativeHttp`): GET, or POST `form` as
+     * application/x-www-form-urlencoded, to an https host in HttpHosts, so the page is no general
+     * proxy. Answers `{http: id, status, body}` or `{http: id, error: host | timeout | network}` --
+     * an error kind, never a sentence, like the readings. Awaited on the UI thread, so the answer is
+     * posted from it.
+     */
+    async void Fetch(JsonObject body)
+    {
+        var answer = new JsonObject { ["http"] = body["id"]?.DeepClone() };
+        var target = body["url"]?.ToString();
+        try
+        {
+            if (!Uri.TryCreate(target, UriKind.Absolute, out var url) || url.Scheme != "https" || !HttpHosts.Contains(url.Host))
+            {
+                answer["error"] = "host";
+                Program.Log($"http {target} refused: host not allowed");
+            }
+            else
+            {
+                using var request = new HttpRequestMessage(body["form"] is JsonObject ? HttpMethod.Post : HttpMethod.Get, url);
+                if (body["form"] is JsonObject form)
+                    request.Content = new FormUrlEncodedContent(form.Select(kv => KeyValuePair.Create(kv.Key, kv.Value?.ToString() ?? "")));
+                request.Headers.Referrer = new Uri($"https://{url.Host}/");
+                using var response = await http.SendAsync(request);
+                answer["status"] = (int)response.StatusCode;
+                answer["body"] = await response.Content.ReadAsStringAsync();
+                Program.Log($"http {request.Method} {url} {(int)response.StatusCode}");
+            }
+        }
+        catch (Exception e)
+        {
+            answer["error"] = e is TaskCanceledException ? "timeout" : "network";
+            Program.Log($"http {target} failed: {e.Message}");
+        }
+        // The window may have closed during the request; an exception here would end the process (async void).
+        if (IsDisposed || web.IsDisposed) return;
+        try { web.CoreWebView2?.PostWebMessageAsJson(answer.ToJsonString()); }
+        catch (Exception e) when (e is InvalidOperationException or ObjectDisposedException) { Program.Log($"http {target} answer dropped: {e.Message}"); }
     }
 
     protected override void OnResize(EventArgs e)

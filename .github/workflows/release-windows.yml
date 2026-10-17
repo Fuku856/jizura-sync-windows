@@ -5,6 +5,10 @@
 #   the same commit; it fails if the tag is not on the branch its kind calls for.
 # - The tag is the version: v1.2.3 or v1.2.3-beta.1 (the exe's file version drops the suffix).
 # - GitHub runs this file as it is in the tagged commit, so the branch you tag must already have it.
+# - Once the build has succeeded, the release body is always overwritten: GitHub's generated notes
+#   (PRs since the previous release), headed by a summary for users from Claude when the
+#   CLAUDE_CODE_OAUTH_TOKEN secret is set (`claude setup-token`). Without it, or if Claude fails, the
+#   body is the generated notes only. A failed build (a tag on the wrong branch) leaves the body as is.
 name: Release (Windows)
 
 on:
@@ -13,11 +17,90 @@ on:
 
 permissions:
   contents: write
+  pull-requests: read # release-notes reads each PR's description
 
 concurrency:
   group: release-${{ github.event.release.tag_name }}
 
 jobs:
+  release-notes:
+    needs: build # a release that is to be deleted and made again keeps its body
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.release.tag_name }}
+      REPO: ${{ github.repository }}
+      PUBLISHED_AT: ${{ github.event.release.published_at }}
+      PRERELEASE: ${{ github.event.release.prerelease }}
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      SUMMARY_PROMPT: |
+        あなたは Windows アプリ「jizura-sync」のリリース担当です。jizura-sync は、PC で再生中の曲の同期歌詞を取得し、JIZURA で文字PVとして描くアプリです。入力は GitHub が自動生成したリリースノート（PR 一覧）と、各 PR の説明です。これを読み、アプリの利用者（エンドユーザー）向けに、今回の変更点を日本語の箇条書きで要約してください。
+
+        出力ルール:
+        - Markdown のみを出力し、前置きや結びの文章は書かない。
+        - 見出しは「### 新機能」「### 改善・修正」の 2 つを使う（該当する変更が無い見出しは省略）。
+        - 各項目は体言止め（名詞で終える）で統一する。「〜しました」「〜した」「〜なった」などの述語で終えない。例:「歌詞の表示タイミングの調整」。
+        - PR から確認できる事実だけを書く。推測や誇張、効果・利点の主観的な説明（例:「〜しやすくなった」）は書かない。
+        - 1 項目につき変更 1 つを簡潔に書き、PR タイトルをそのまま転記せず平易な日本語にする。
+        - 絵文字は一切使わない。
+        - CI / GitHub Actions / ドキュメント等、利用者に関係しない内部的な変更は含めない。
+        - 各見出しの項目は最大 6 個程度に収め、重要なものを優先する。
+        - 利用者に関係する変更が一つも無い場合は、NONE とだけ出力する。
+    steps:
+      - name: Write release notes
+        run: |
+          # Name the previous release, or GitHub picks an older tag and repeats PRs already released.
+          # A pre-release compares with the last release of either kind, a release with the last release.
+          prev=$(gh release list --repo "$REPO" --exclude-drafts --limit 100 \
+            --json tagName,isPrerelease,publishedAt \
+            | jq -r --arg tag "$TAG" --arg at "$PUBLISHED_AT" --arg pre "$PRERELEASE" '
+                [.[] | select(.tagName != $tag and .publishedAt < $at
+                              and ($pre == "true" or .isPrerelease == false))]
+                | sort_by(.publishedAt) | last | .tagName // empty')
+          echo "previous release: ${prev:-(none)}"
+          args=(-f tag_name="$TAG")
+          [ -n "$prev" ] && args+=(-f previous_tag_name="$prev")
+          notes=$(gh api -X POST "repos/$REPO/releases/generate-notes" "${args[@]}" --jq '.body // empty')
+          # An empty file would blank the release body.
+          [ -n "$notes" ] || { echo "generate-notes returned an empty body; leaving the release as is."; exit 0; }
+          printf '%s\n' "$notes" > changes.md
+
+          summary=""
+          if [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+            # PR titles alone say too little, so Claude also reads each PR's description.
+            {
+              cat changes.md
+              echo
+              echo "# 各 PR の説明"
+              for n in $(grep -oE "github\.com/$REPO/pull/[0-9]+" changes.md | grep -oE '[0-9]+$' | sort -un); do
+                echo
+                # A PR that cannot be read only leaves its description out of the summary.
+                gh pr view "$n" --repo "$REPO" --json number,title,body \
+                  --jq '"## #\(.number) \(.title)\n\n\((.body // "")[:3000])"' \
+                  || echo "::warning::Could not read PR #$n; summarising without its description." >&2
+              done
+            } > input.md
+            summary=$(timeout 300 npx -y @anthropic-ai/claude-code@2.1.287 -p --model sonnet \
+              --tools "" --no-session-persistence --system-prompt "$SUMMARY_PROMPT" < input.md) \
+              || { echo "::warning::Claude summary failed; writing the generated notes only."; summary=""; }
+            [ "$(printf '%s' "$summary" | tr -d '[:space:]')" = NONE ] && summary=""
+          fi
+
+          if [ -n "$summary" ]; then
+            {
+              echo "## $TAG の変更点"
+              echo
+              printf '%s\n' "$summary"
+              echo
+              echo "---"
+              echo
+              cat changes.md
+            } > notes.md
+          else
+            cp changes.md notes.md
+          fi
+          gh release edit "$TAG" --repo "$REPO" --notes-file notes.md
+
   build:
     runs-on: windows-latest
     env:

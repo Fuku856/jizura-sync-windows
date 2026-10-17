@@ -1,5 +1,5 @@
 // Playback from the Windows app (win/Program.cs), which reads the system's media sessions and posts
-// each reading as a web message. Same interface as SpotifyPlayer.
+// each reading as a web message. Same interface as app.js's MockPlayer.
 
 import { t } from './i18n.js';
 
@@ -10,6 +10,46 @@ const RESYNC_MS = 120;
 const webview = () => window.chrome?.webview;
 
 export const hasNative = () => !!webview();
+
+/** How long the page waits for the host's answer to `nativeHttp` (the host itself gives up at 10 s). */
+const HTTP_TIMEOUT_MS = 15000;
+const httpWaiting = new Map();      // id -> { resolve, reject }, each also clearing its timer and abort listener
+let httpId = 0;
+let httpListening = false;
+
+/**
+ * GET (or POST `form` as application/x-www-form-urlencoded) through the Windows host, for lyric
+ * catalogues that send no CORS headers. The host allows only the hosts it lists (Program.cs
+ * `HttpHosts`). Resolves with `{status, body}`; rejects with an error kind as the message: `host`
+ * (refused), `timeout` or `network`. An aborted `signal` rejects at once with its reason; the
+ * host still finishes the request, and its answer is dropped.
+ */
+export function nativeHttp(url, form = null, signal = null) {
+    if (!httpListening) {
+        webview().addEventListener('message', (e) => {
+            const w = e.data?.http !== undefined && httpWaiting.get(e.data.http);
+            if (!w) return;
+            if (e.data.error) w.reject(new Error(e.data.error));
+            else w.resolve({ status: e.data.status, body: e.data.body });
+        });
+        httpListening = true;
+    }
+    if (signal?.aborted) return Promise.reject(signal.reason);
+    const id = ++httpId;
+    return new Promise((resolve, reject) => {
+        const settle = (fn) => (v) => {
+            httpWaiting.delete(id);
+            clearTimeout(timer);
+            signal?.removeEventListener('abort', onAbort);
+            fn(v);
+        };
+        const onAbort = () => settle(reject)(signal.reason);
+        const timer = setTimeout(() => settle(reject)(new Error('timeout')), HTTP_TIMEOUT_MS);
+        httpWaiting.set(id, { resolve: settle(resolve), reject: settle(reject) });
+        signal?.addEventListener('abort', onAbort, { once: true });
+        webview().postMessage({ cmd: 'http', id, url, form });
+    });
+}
 
 export class NativePlayer {
     constructor() {
@@ -63,6 +103,7 @@ export class NativePlayer {
     }
 
     _update(s) {
+        if (s.http !== undefined) return;          // an answer to nativeHttp, not a reading
         if (s.seq < this._seq) return;
         if (s.error) {
             s.error.message = errorText(s.error);
