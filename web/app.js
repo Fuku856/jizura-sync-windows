@@ -46,6 +46,8 @@ const ASPECTS = ['16:9', '9:16', '4:3', '3:4', '1:1', '4:5', '21:9'];
 // A song with no lyrics (yet) is a title card over one interlude cut. `[間奏]` is JIZURA's own
 // lyric syntax for an instrumental break.
 const NO_LYRICS = '[00:00.50][間奏]';
+// `?lyrics=lrclib|petit|lrcred|netease` asks that lyric source alone (lyrics.js SOURCES), for testing.
+const LYRICS_SOURCE = new URLSearchParams(location.search).get('lyrics');
 
 const OFFSET_KEY = 'jizura-sync.offsetMs';
 const OFFSET_STEP_MS = 50;
@@ -63,7 +65,7 @@ const BAR_KEY = 'jizura-sync.barHidden';
 let player = null;
 let trackId = null;          // track the current plan belongs to
 let artUrl = null;           // cover the bar shows
-let song = null;             // { title, artist, durationMs, lyrics } for the current track
+let song = null;             // { title, artist, durationMs, lyrics, source } for the current track
 let look = null;             // JIZURA random look (omakase) applied on top of the default project
 let plan = null;
 let planAspect = null;       // JIZURA aspect key ('16:9' …) the plan was built for
@@ -132,7 +134,7 @@ async function loadTrack(state) {
     setStatus(t('Looking up lyrics…'));
     let lyr = null;
     try {
-        lyr = await fetchLyrics({ artist: state.artist, title: state.title, album: state.album, durationMs: state.durationMs });
+        lyr = await fetchLyrics({ artist: state.artist, title: state.title, album: state.album, durationMs: state.durationMs }, undefined, LYRICS_SOURCE);
     } catch (err) {
         if (token !== loadToken) return;
         console.warn('lyrics', err);
@@ -148,9 +150,9 @@ async function loadTrack(state) {
         return;
     }
     const { lyrics, lines, parts } = lrcToJizura(lyr.synced);
-    song = Object.assign({}, song, { lyrics });
+    song = Object.assign({}, song, { lyrics, source: lyr.source });
     buildPlan();
-    console.info(`[jizura-sync] ${state.title}: ${lines} lines in ${parts} parts`);
+    console.info(`[jizura-sync] ${state.title}: ${lines} lines in ${parts} parts (${lyr.source})`);
 }
 
 /**

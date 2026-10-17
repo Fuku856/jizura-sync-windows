@@ -2,7 +2,7 @@
 
 A Windows app that turns the song playing on your PC into real-time lyric motion.
 
-jizura-sync follows what plays on this PC through Windows' media controls (the media flyout by the volume control), fetches time-synced lyrics from [LRCLIB](https://lrclib.net), and renders them with [JIZURA](https://github.com/852wa/JIZURA), an engine that assembles lyric videos (文字PV) from hundreds of small layout, motion and decoration parts. It follows Spotify, Apple Music, browser tabs (YouTube and the like) and any other player that shows up in Windows' media controls.
+jizura-sync follows what plays on this PC through Windows' media controls (the media flyout by the volume control), fetches time-synced lyrics from [LRCLIB](https://lrclib.net), [PetitLyrics](https://petitlyrics.com), [lrc.red](https://lrc.red) and NetEase Cloud Music, and renders them with [JIZURA](https://github.com/852wa/JIZURA), an engine that assembles lyric videos (文字PV) from hundreds of small layout, motion and decoration parts. It follows Spotify, Apple Music, browser tabs (YouTube and the like) and any other player that shows up in Windows' media controls.
 
 A look is picked for each song automatically. Press the `R` key in the window to switch to a different one.
 
@@ -10,7 +10,7 @@ A look is picked for each song automatically. Press the `R` key in the window to
 
 > **This is an unofficial fork of [Saqoosha/jizura-sync](https://github.com/Saqoosha/jizura-sync) (a macOS app)** that adds a Windows app. It is not affiliated with the upstream author; please do not send questions about the Windows app upstream. For the macOS app, use [upstream](https://github.com/Saqoosha/jizura-sync).
 >
-> **A personal project, not a service.** The lyrics come from LRCLIB and are not licensed. Read the [disclaimer](#disclaimer) before sharing what you make with it.
+> **A personal project, not a service.** The lyrics come from LRCLIB and other unofficial sources and are not licensed. Read the [disclaimer](#disclaimer) before sharing what you make with it.
 
 ## Differences from upstream
 
@@ -83,7 +83,7 @@ The bar at the bottom shows the cover art, the track, and play / pause, previous
 
 ## Limitations
 
-- Lyrics are only as good as LRCLIB's community data. Some tracks have none, or only unsynced text, or none within 4 seconds of the track's length; those show the title card and say why.
+- Lyrics are only as good as the sources' data. Some tracks have none in any of them, or only unsynced text, or none within 4 seconds of the track's length; those show the title card and say why.
 - Anything that reports no song length (live streams, pages that set no media position, players that report none) shows the "no song position" notice and gets no lyrics.
 - A browser tab is followed correctly only when the page gives Windows the title, artist and position. While paused, the position is whatever the page reported last.
 - There is no beat sync. JIZURA can snap cuts to beats detected from audio, but jizura-sync cannot read the player's audio.
@@ -93,9 +93,9 @@ The bar at the bottom shows the cover art, the track, and play / pause, previous
 
 ## Disclaimer
 
-This project is a personal experiment. It is not affiliated with, endorsed by, or supported by Spotify, Apple, Microsoft, LRCLIB, the JIZURA author or the upstream jizura-sync author. It is provided as is, without warranty (see [LICENSE](LICENSE)). Whoever runs it is responsible for how they use it.
+This project is a personal experiment. It is not affiliated with, endorsed by, or supported by Spotify, Apple, Microsoft, LRCLIB, PetitLyrics, lrc.red, NetEase, the JIZURA author or the upstream jizura-sync author. It is provided as is, without warranty (see [LICENSE](LICENSE)). Whoever runs it is responsible for how they use it.
 
-- **The lyrics are not licensed.** Lyrics are copyrighted works of their writers and publishers. LRCLIB's lyrics are contributed by its users, and neither LRCLIB nor this project has cleared them with the rights holders. This project holds no rights to any lyrics; it fetches them at runtime and does not store or redistribute them.
+- **The lyrics are not licensed.** Lyrics are copyrighted works of their writers and publishers. LRCLIB's lyrics are contributed by its users, and neither LRCLIB nor this project has cleared them with the rights holders. PetitLyrics, lrc.red and NetEase are reached through endpoints that are not public APIs (PetitLyrics through the app ID of its own Android SDK), which may break their terms of use. This project holds no rights to any lyrics; it fetches them at runtime and does not store or redistribute them.
 - **The app uses no music service API.** It only reads what plays on the same PC from Windows' media sessions. That does not license anything: the recordings are still their services' and rights holders' to license.
 
 ## For developers
@@ -116,7 +116,7 @@ In the devtools console, `jizuraSync.perf` shows the quality level, canvas size 
 ### How it works
 
 - **Playback.** The app reads title, artist, cover, position and play state from Windows' Global System Media Transport Controls (the same sessions the volume flyout shows). It reads right away whenever a session announces a change of track, play state or timeline, and also once a second while something plays. Paused or idle, it only waits for events. Sessions belong to other processes, so every call has a 2 s timeout.
-- **Lyrics.** Lyrics come from LRCLIB's synced LRC files, matched by artist, title and duration; a lookup that hits an LRCLIB outage is retried twice. LRC is close to JIZURA's own lyric format, so the conversion only escapes JIZURA's markup characters and marks song sections.
+- **Lyrics.** LRCLIB, PetitLyrics, lrc.red and NetEase are asked at once, and the first in that order with time-synced lyrics wins. Each only counts a hit with the same artist, title and duration, so covers are not picked up. PetitLyrics is strongest on Japanese songs and has word timing. NetEase sends no CORS headers, so only the Windows app uses it (the host fetches it). A lookup that hits an LRCLIB outage is retried twice, but no longer than 3 s once a lower source has lyrics. Every source is turned into LRC, which is close to JIZURA's own lyric format, so the conversion only escapes JIZURA's markup characters and marks song sections.
 - **Rendering.** The window is WinForms + WebView2 running the page in `web/`, served from the virtual host `https://app.jizura-sync.test/` (that origin owns the page's localStorage, so do not change it). JIZURA builds a plan for the whole song once, and its renderer is a pure function of time, so drawing the current playback position every frame is all the sync there is.
 
 Detailed notes on the code and design are in [AGENTS.md](AGENTS.md).
@@ -164,4 +164,4 @@ The app is built on [jizura-sync](https://github.com/Saqoosha/jizura-sync) by [S
 
 ## License
 
-MIT, see [LICENSE](LICENSE) (© Saqoosha, Fuku856). JIZURA is © 852wa, MIT licensed, and included as a submodule: see `web/vendor/JIZURA/LICENSE` and its `THIRD_PARTY_NOTICES.md`. The WebView2 SDK is under Microsoft's license and fetched from NuGet at build time. Lyrics are fetched at runtime from LRCLIB and are not part of this repository.
+MIT, see [LICENSE](LICENSE) (© Saqoosha, Fuku856). JIZURA is © 852wa, MIT licensed, and included as a submodule: see `web/vendor/JIZURA/LICENSE` and its `THIRD_PARTY_NOTICES.md`. The WebView2 SDK is under Microsoft's license and fetched from NuGet at build time. Lyrics are fetched at runtime from those sources and are not part of this repository.

@@ -1,6 +1,13 @@
-// Synced lyrics from LRCLIB (https://lrclib.net) -- public, no key, CORS `*`.
-// LRCLIB answers with LRC text, which is exactly what JIZURA's planner already parses, so the
-// only work here is finding the right record and escaping JIZURA's own lyric markup.
+// Synced lyrics from several catalogues, asked at once and taken in SOURCES order:
+//  - LRCLIB (https://lrclib.net): public, no key, CORS `*`; community LRC, strongest overall.
+//  - PetitLyrics (プチリリ): Japanese lyrics service, word-timed; fills most Japanese gaps.
+//  - lrc.red: Apple Music style TTML keyed by ISRC.
+//  - NetEase Cloud Music: LRC, many Japanese / Chinese songs. No CORS, so only the Windows app
+//    can ask it (through the host, see native.js `nativeHttp`).
+// Every source ends up as LRC text, which is what JIZURA's planner already parses, so the rest
+// is finding the right record and escaping JIZURA's own lyric markup.
+
+import { hasNative, nativeHttp } from './native.js';
 
 const API = 'https://lrclib.net/api';
 // LRCLIB asks clients to identify themselves; browsers may not set User-Agent, so it accepts this.
@@ -8,16 +15,55 @@ const CLIENT = 'jizura-sync-windows (https://github.com/Fuku856/jizura-sync-wind
 /** Longest Retry-After (s) we are willing to sit out before giving up on this track. */
 const MAX_RETRY_AFTER_S = 30;
 
-/** How far LRCLIB's duration may differ from Spotify's before a search hit is rejected (s). */
+/** How far a catalogue's duration may differ from the player's before a hit is rejected (s). */
 const DURATION_TOLERANCE_S = 4;
+
+/** Tried at once; the first in this order with synced lyrics wins. `key` is for `?lyrics=`. */
+const SOURCES = [
+    { key: 'lrclib', name: 'LRCLIB', fetch: fetchLrclib },
+    { key: 'petit', name: 'PetitLyrics', fetch: fetchPetit },
+    { key: 'lrcred', name: 'lrc.red', fetch: fetchLrcRed },
+    { key: 'netease', name: 'NetEase', fetch: fetchNetease, native: true },
+];
+/**
+ * Once a lower source has synced lyrics, how long a higher one still pending may take (ms).
+ * LRCLIB retries a 5xx after 2 s and 5 s; without this a busy LRCLIB held every song for 7 s+.
+ */
+const HIGHER_WAIT_MS = 3000;
+/** Each request to the newer sources gives up after this; LRCLIB keeps its own retry ladder. */
+const REQUEST_TIMEOUT_MS = 10000;
 
 /**
  * @param {{artist: string, title: string, album: string|null, durationMs: number}} track
  * @param {AbortSignal} [signal]
- * @returns {Promise<{synced: string|null, plain: string|null, instrumental: boolean} | null>}
- *   null when LRCLIB has no record for the track.
+ * @param {string|null} [only] a SOURCES key: ask that source alone (`?lyrics=` while testing)
+ * @returns {Promise<{synced: string|null, plain: string|null, instrumental: boolean, source: string} | null>}
+ *   null when no source has a record for the track. Throws only when every source failed.
  */
-export async function fetchLyrics(track, signal) {
+export async function fetchLyrics(track, signal, only = null) {
+    const sources = SOURCES.filter((s) => (!only || s.key === only) && (!s.native || hasNative()));
+    if (!sources.length) throw new Error(`no lyrics source "${only}" here`);
+    let deadline = null, passDeadline;
+    const late = new Promise((resolve) => { passDeadline = resolve; });
+    const runs = sources.map((s) => s.fetch(track, signal).then(
+        (rec) => {
+            if (rec?.synced && !deadline) deadline = setTimeout(passDeadline, HIGHER_WAIT_MS);
+            return { rec: rec && { ...rec, source: s.name } };
+        },
+        (err) => { if (!signal?.aborted) console.warn(`[jizura-sync] ${s.name}:`, err); return { err }; }));
+    let fallback = null, firstErr = null, failed = 0;
+    for (const run of runs) {
+        const r = await Promise.race([run, late]);
+        if (!r) continue;                           // still pending past the deadline: a lower source has it
+        if (r.err) { failed++; firstErr ??= r.err; continue; }
+        if (r.rec?.synced) { clearTimeout(deadline); return r.rec; }
+        fallback ??= r.rec;
+    }
+    if (!fallback && failed === runs.length) throw firstErr;
+    return fallback;
+}
+
+async function fetchLrclib(track, signal) {
     const durationS = Math.round(track.durationMs / 1000);
     // Spotify joins multiple artists with ", "; LRCLIB indexes the credited artist string,
     // which is usually the first one alone.
@@ -81,6 +127,217 @@ function shape(rec) {
     return { synced: rec.syncedLyrics || null, plain: rec.plainLyrics || null, instrumental: !!rec.instrumental };
 }
 
+// --- matching a catalogue's hit to the playing track ---------------------------------------
+
+/** Case, width, spaces and punctuation folded away, for comparing names across catalogues. */
+function fold(s) {
+    return (s ?? '').normalize('NFKC').toLowerCase().replace(/[\s\p{P}\p{S}]/gu, '');
+}
+
+/** The title without a trailing "(…)", "[…]", "【…】" or " - …" (versions, tie-ins, remasters). */
+function baseTitle(s) {
+    return fold(s.replace(/\s*[(（[［【〔].*$/, '').replace(/\s+[-–—]\s+.*$/, '')) || fold(s);
+}
+
+/** Between the names of a multi-artist credit: "A, B & C", "A × B", "A feat. B". */
+const ARTIST_SEPARATOR = /\s*(?:[,、&＆×/;]|\s(?:feat\.?|ft\.|with)\s)\s*/i;
+
+function splitArtists(s) {
+    return (s ?? '').split(ARTIST_SEPARATOR).map(fold).filter(Boolean);
+}
+
+/** A version the player's title does not name: a cover, karaoke or live take of the same song. */
+const VERSION_WORDS = /翻唱|翻自|伴奏|カラオケ|歌ってみた|\b(?:cover|covered|karaoke|live|remix|inst|instrumental|off vocal)\b/gi;
+
+/**
+ * Whether a catalogue hit is the playing track: same length (when the hit has one), same base
+ * title, an artist in common, and no version word the player's title lacks. The artist check is
+ * what keeps covers out -- lrc.red answers 米津玄師「Lemon」 with 花僮's and 洛天依's covers.
+ */
+function matches(track, { title, artist, durationS }) {
+    if (durationS && Math.abs(durationS - track.durationMs / 1000) > DURATION_TOLERANCE_S) return false;
+    if (baseTitle(title) !== baseTitle(track.title)) return false;
+    const own = track.title.toLowerCase();
+    if ((title.match(VERSION_WORDS) ?? []).some((w) => !own.includes(w.toLowerCase()))) return false;
+    const mine = splitArtists(track.artist), theirs = splitArtists(artist);
+    return mine.some((a) => theirs.some((b) => a === b || (Math.min(a.length, b.length) >= 2 && (a.includes(b) || b.includes(a)))));
+}
+
+/** The first credited artist: catalogues index that, not "A, B & C". */
+function firstArtist(s) {
+    return s.split(ARTIST_SEPARATOR)[0] || s;
+}
+
+function timeoutSignal(signal) {
+    const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+    return signal ? AbortSignal.any([signal, timeout]) : timeout;
+}
+
+/**
+ * Rows `{t, end, text, newPart}` (seconds) -> LRC. A row that opens a new part (the source marks sections) or follows a silence of
+ * INTERLUDE_MIN_S gets an empty row in front, at the previous row's end -- how LRC files mark a
+ * pause, so partBreaks() and the [間奏] cuts treat these sources like LRCLIB's.
+ */
+function rowsToLrc(rows) {
+    const out = [];
+    rows.forEach((r, i) => {
+        const prev = rows[i - 1];
+        if (prev && (r.newPart || r.t - prev.end >= INTERLUDE_MIN_S)) out.push(tag(Math.min(prev.end, r.t)));
+        out.push(`${tag(r.t)}${r.text}`);
+    });
+    if (rows.length) out.push(tag(rows[rows.length - 1].end));
+    return out.join('\n');
+}
+
+function base64Utf8(b64) {
+    return new TextDecoder().decode(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)));
+}
+
+// --- PetitLyrics (プチリリ) -----------------------------------------------------------------
+
+const PETIT = 'https://p0.petitlyrics.com/api/GetPetitLyricsData.php';
+
+/**
+ * The API of PetitLyrics' Android SDK. `lyricsType=3` asks for word timing (`<wsy>`, base64);
+ * a record that has only text comes back as type 1. A search lists up to maxCount records but
+ * carries lyrics for the first one alone; another one is fetched again by `key_lyricsId`.
+ */
+async function petit(params, signal) {
+    const body = new URLSearchParams({ terminalType: '10', clientAppId: 'p1110417', lyricsType: '3', ...params });
+    const res = await fetch(PETIT, { method: 'POST', body, signal: timeoutSignal(signal) });
+    if (!res.ok) throw new Error(`PetitLyrics ${res.status}`);
+    const doc = new DOMParser().parseFromString(await res.text(), 'application/xml');
+    return [...doc.getElementsByTagName('song')].map((el) => {
+        const get = (k) => el.getElementsByTagName(k)[0]?.textContent ?? '';
+        return { id: get('lyricsId'), title: get('title'), artist: get('artist'), durationS: Number(get('duration')) / 1000,
+                 type: get('lyricsType'), official: get('isOfficial') === '1', data: get('lyricsData') };
+    });
+}
+
+async function fetchPetit(track, signal) {
+    const songs = await petit({ key_title: track.title, key_artist: firstArtist(track.artist), maxCount: '10' }, signal);
+    const hits = songs.filter((s) => matches(track, s));
+    const hit = hits.find((s) => s.official) ?? hits[0];
+    if (!hit) return null;
+    const rec = hit.data ? hit : (await petit({ key_lyricsId: hit.id }, signal))[0];
+    if (!rec?.data) return null;
+    const text = base64Utf8(rec.data);
+    if (rec.type === '3' || text.startsWith('<wsy')) return { synced: wsyToLrc(text), plain: null, instrumental: false };
+    return { synced: null, plain: text, instrumental: false };
+}
+
+/** `<wsy><line><linestring>…</linestring><word><starttime>ms</starttime><endtime>ms</endtime>…` -> LRC. An empty line is a section break. */
+function wsyToLrc(xml) {
+    const doc = new DOMParser().parseFromString(xml, 'application/xml');
+    const rows = [];
+    let newPart = false;
+    for (const line of doc.getElementsByTagName('line')) {
+        const text = line.getElementsByTagName('linestring')[0]?.textContent.trim() ?? '';
+        const starts = [...line.getElementsByTagName('starttime')].map((e) => Number(e.textContent));
+        const ends = [...line.getElementsByTagName('endtime')].map((e) => Number(e.textContent));
+        if (!text || !starts.length) { newPart = rows.length > 0; continue; }
+        rows.push({ t: starts[0] / 1000, end: Math.max(...ends, starts[0]) / 1000, text, newPart });
+        newPart = false;
+    }
+    return rowsToLrc(rows);
+}
+
+// --- lrc.red --------------------------------------------------------------------------------
+
+const LRC_RED = 'https://lrc.red';
+
+async function fetchLrcRed(track, signal) {
+    const params = new URLSearchParams({ track: track.title, artist: firstArtist(track.artist), duration: String(Math.round(track.durationMs / 1000)) });
+    const res = await fetch(`${LRC_RED}/match.json?${params}`, { signal: timeoutSignal(signal) });
+    if (!res.ok) throw new Error(`lrc.red ${res.status}`);
+    const hit = ((await res.json()).hits ?? []).find((h) => matches(track, { title: h.title, artist: h.artist, durationS: h.duration }));
+    if (!hit) return null;
+    const ttml = await fetch(`${LRC_RED}/s/${encodeURIComponent(hit.isrc)}.ttml`, { signal: timeoutSignal(signal) });
+    if (ttml.status === 404) return null;
+    if (!ttml.ok) throw new Error(`lrc.red ${ttml.status}`);
+    return ttmlToRecord(await ttml.text());
+}
+
+/** TTML clock values: "1:02:03.4", "2:03.456", "3.456", "3.456s", "3456ms". */
+function ttmlTime(s) {
+    if (!s) return NaN;
+    if (s.endsWith('ms')) return parseFloat(s) / 1000;
+    if (s.endsWith('s')) return parseFloat(s);
+    return s.split(':').reduce((acc, v) => acc * 60 + parseFloat(v), 0);
+}
+
+/**
+ * Apple Music style TTML -> lyric record. Lines are the `<p>`s of the body (the head holds
+ * translations and readings); background vocals (`ttm:role="x-bg"`) are left out, and each
+ * `<div>` is a song part (verse, chorus …). A file with no timing is plain text.
+ */
+function ttmlToRecord(xml) {
+    const doc = new DOMParser().parseFromString(xml, 'application/xml');
+    const body = doc.getElementsByTagNameNS('*', 'body')[0];
+    if (!body) return null;
+    const rows = [], texts = [];
+    let part = null;
+    for (const p of body.getElementsByTagNameNS('*', 'p')) {
+        const line = p.cloneNode(true);
+        for (const el of [...line.getElementsByTagName('*')]) {
+            if ([...el.attributes].some((a) => a.localName === 'role' && a.value === 'x-bg')) el.remove();
+        }
+        const text = line.textContent.replace(/\s+/g, ' ').trim();
+        if (!text) continue;
+        texts.push(text);
+        const spans = p.getElementsByTagNameNS('*', 'span');
+        const t = ttmlTime(p.getAttribute('begin') ?? spans[0]?.getAttribute('begin'));
+        const end = ttmlTime(p.getAttribute('end') ?? spans[spans.length - 1]?.getAttribute('end'));
+        if (Number.isNaN(t)) continue;
+        rows.push({ t, end: Number.isNaN(end) ? t : end, text, newPart: part !== null && p.parentNode !== part });
+        part = p.parentNode;
+    }
+    if (rows.length) return { synced: rowsToLrc(rows), plain: null, instrumental: false };
+    return texts.length ? { synced: null, plain: texts.join('\n'), instrumental: false } : null;
+}
+
+// --- NetEase Cloud Music ----------------------------------------------------------------------
+
+const NETEASE = 'https://music.163.com/api';
+
+/** NetEase sends no CORS headers; the Windows host fetches it (`music.163.com` only). */
+async function netease(path, form) {
+    const res = await nativeHttp(`${NETEASE}${path}`, form);
+    if (res.status !== 200) throw new Error(`NetEase ${res.status}`);
+    return JSON.parse(res.body);
+}
+
+async function fetchNetease(track) {
+    const found = await netease('/cloudsearch/pc', { s: `${track.title} ${firstArtist(track.artist)}`, type: '1', limit: '10', offset: '0' });
+    const hit = (found.result?.songs ?? []).find((s) =>
+        matches(track, { title: s.name, artist: (s.ar ?? []).map((a) => a.name).join(', '), durationS: s.dt / 1000 }));
+    if (!hit) return null;
+    const lyr = await netease(`/song/lyric?id=${hit.id}&lv=1`);
+    const lrc = dropCredits(lyr.lrc?.lyric ?? '');
+    if (lyr.nolyric || lyr.pureMusic || /纯音乐，请欣赏/.test(lrc)) return { synced: null, plain: null, instrumental: true };
+    const timed = lrc.split('\n').filter((l) => /^\[\d+:\d+(?:[.:]\d+)?\]\s*\S/.test(l) && !/^\[00:00[.:]00?0?\]/.test(l));
+    if (timed.length >= 3) return { synced: lrc, plain: null, instrumental: false };
+    const plain = lrc.replace(/^(?:\[[^\]]*\])+/gm, '').trim();
+    return plain ? { synced: null, plain, instrumental: false } : null;
+}
+
+/**
+ * NetEase opens with credit rows timed like lyrics: "[00:00.000] 作词 : 米津玄師", 作曲, 编曲,
+ * 制作人 … Rows of the form "name : value" before the first sung row are dropped; a colon later
+ * in the song is lyrics.
+ */
+function dropCredits(lrc) {
+    let sung = false;
+    return lrc.replace(/\r/g, '').split('\n').filter((raw) => {
+        const m = raw.match(/^((?:\[\d+:\d+(?:[.:]\d+)?\])+)(.*)$/);
+        const text = m?.[2].trim();
+        if (!text || sung) return true;
+        if (/^[^:：]{1,12}[:：]/.test(text)) return false;
+        sung = true;
+        return true;
+    }).join('\n');
+}
+
 /** A silent stretch at least this long becomes a JIZURA [間奏] cut (graphics, no lyric). */
 const INTERLUDE_MIN_S = 6;
 
@@ -100,7 +357,7 @@ export function lrcToJizura(lrc) {
         const m = raw.match(/^((?:\[\d+:\d+(?:[.:]\d+)?\])+)(.*)$/);
         if (!m) continue;                                   // [ar:] / [ti:] headers and junk
         const times = [...m[1].matchAll(/\[(\d+):(\d+(?:[.:]\d+)?)\]/g)].map((t) => +t[1] * 60 + parseFloat(t[2].replace(':', '.')));
-        const text = escapeMarkup(m[2].trim());
+        const text = escapeMarkup(unifyRadicals(m[2].trim()));
         for (const t of times) rows.push({ t, text });
     }
     rows.sort((a, b) => a.t - b.t);
@@ -226,6 +483,15 @@ function partBreakGap(textRows) {
     const iv = textRows.slice(1).map((r, i) => r.t - textRows[i].t).sort((a, b) => a - b);
     if (!iv.length) return Infinity;
     return Math.max(4, 1.8 * iv[iv.length >> 1]);
+}
+
+/**
+ * Kangxi radicals and CJK radical supplements (U+2E80–U+2FDF) -> the ordinary kanji they look
+ * like. lrc.red's text has them in place of kanji (「⼆⼈」「⽇」), which fonts draw apart from
+ * the rest of the line or not at all.
+ */
+function unifyRadicals(s) {
+    return s.replace(/[⺀-⿟]/g, (c) => c.normalize('NFKC'));
 }
 
 function escapeMarkup(s) {

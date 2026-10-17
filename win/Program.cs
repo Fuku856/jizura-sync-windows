@@ -510,7 +510,50 @@ sealed class MainForm : Form
                 PostMessage(Handle, WM_NCLBUTTONDOWN, HTCAPTION, (IntPtr)((p.Y << 16) | (p.X & 0xFFFF)));
                 break;
             case "play" or "pause" or "next" or "previous" or "seek": bridge.Command(cmd, body); break;
+            case "http": Fetch((JsonObject)body); break;
         }
+    }
+
+    /** Lyric catalogues the page may reach through Fetch: ones that send no CORS headers (web/lyrics.js). */
+    static readonly HashSet<string> HttpHosts = ["music.163.com"];
+    static readonly HttpClient http = CreateHttpClient();
+
+    static HttpClient CreateHttpClient()
+    {
+        var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10), MaxResponseContentBufferSize = 4 << 20 };
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36");
+        return client;
+    }
+
+    /**
+     * Page → native `{cmd: 'http', id, url, form?}` (native.js `nativeHttp`): GET, or POST `form` as
+     * application/x-www-form-urlencoded, to an https host in HttpHosts, so the page is no general
+     * proxy. Answers `{http: id, status, body}` or `{http: id, error}`. Awaited on the UI thread, so
+     * the answer is posted from it.
+     */
+    async void Fetch(JsonObject body)
+    {
+        var id = body["id"]?.DeepClone();
+        var answer = new JsonObject { ["http"] = id };
+        try
+        {
+            if (!Uri.TryCreate((string?)body["url"], UriKind.Absolute, out var url) || url.Scheme != "https" || !HttpHosts.Contains(url.Host))
+                throw new InvalidOperationException($"host not allowed: {(string?)body["url"]}");
+            using var request = new HttpRequestMessage(body["form"] is JsonObject ? HttpMethod.Post : HttpMethod.Get, url);
+            if (body["form"] is JsonObject form)
+                request.Content = new FormUrlEncodedContent(form.Select(kv => KeyValuePair.Create(kv.Key, kv.Value?.ToString() ?? "")));
+            request.Headers.Referrer = new Uri($"https://{url.Host}/");
+            using var response = await http.SendAsync(request);
+            answer["status"] = (int)response.StatusCode;
+            answer["body"] = await response.Content.ReadAsStringAsync();
+            Program.Log($"http {request.Method} {url} {(int)response.StatusCode}");
+        }
+        catch (Exception e)
+        {
+            answer["error"] = e.Message;
+            Program.Log($"http {(string?)body["url"]} failed: {e.Message}");
+        }
+        web.CoreWebView2?.PostWebMessageAsJson(answer.ToJsonString());
     }
 
     protected override void OnResize(EventArgs e)

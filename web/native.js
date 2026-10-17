@@ -11,6 +11,37 @@ const webview = () => window.chrome?.webview;
 
 export const hasNative = () => !!webview();
 
+/** How long the page waits for the host's answer to `nativeHttp` (the host itself gives up at 10 s). */
+const HTTP_TIMEOUT_MS = 15000;
+const httpWaiting = new Map();      // id -> { resolve, reject, timer }
+let httpId = 0;
+let httpListening = false;
+
+/**
+ * GET (or POST `form` as application/x-www-form-urlencoded) through the Windows host, for lyric
+ * catalogues that send no CORS headers. The host allows only the hosts it lists (Program.cs
+ * `HttpHosts`). Resolves with `{status, body}`; rejects on a network failure or a refused host.
+ */
+export function nativeHttp(url, form = null) {
+    if (!httpListening) {
+        webview().addEventListener('message', (e) => {
+            const w = e.data?.http !== undefined && httpWaiting.get(e.data.http);
+            if (!w) return;
+            httpWaiting.delete(e.data.http);
+            clearTimeout(w.timer);
+            if (e.data.error) w.reject(new Error(e.data.error));
+            else w.resolve({ status: e.data.status, body: e.data.body });
+        });
+        httpListening = true;
+    }
+    const id = ++httpId;
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => { httpWaiting.delete(id); reject(new Error('timed out')); }, HTTP_TIMEOUT_MS);
+        httpWaiting.set(id, { resolve, reject, timer });
+        webview().postMessage({ cmd: 'http', id, url, form });
+    });
+}
+
 export class NativePlayer {
     constructor() {
         this._track = null;          // { trackId, title, artist, album, artUrl, durationMs }
@@ -63,6 +94,7 @@ export class NativePlayer {
     }
 
     _update(s) {
+        if (s.http !== undefined) return;          // an answer to nativeHttp, not a reading
         if (s.seq < this._seq) return;
         if (s.error) {
             s.error.message = errorText(s.error);
