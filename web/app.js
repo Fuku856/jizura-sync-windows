@@ -118,7 +118,9 @@ function buildPlan() {
     pace.settleUntil = performance.now() + SETTLE_MS;
     sizeCanvas();
     J.ensureFonts(song.lyrics + song.title + song.artist + HUD_CHARS, J.fontsOfPlan(plan)).catch(() => {});
-    setStatus(`${J.STYLES[project.style]?.name ?? project.style} · ${J.MOODS[project.mood]?.name ?? ''} · ${t('{n} cuts', { n: plan.cuts.length })}${project.unify ? ` · ${t('same style per section')}` : ''}`);
+    // The lyric source leads: the line is cut with an ellipsis when the window is narrow.
+    const source = song.source ? `${t('Lyrics: {source}', { source: t(song.source) })} · ` : '';
+    setStatus(`${source}${J.STYLES[project.style]?.name ?? project.style} · ${J.MOODS[project.mood]?.name ?? ''} · ${t('{n} cuts', { n: plan.cuts.length })}${project.unify ? ` · ${t('same style per section')}` : ''}`);
 }
 
 async function loadTrack(state) {

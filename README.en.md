@@ -68,7 +68,7 @@ Once it runs, play a song in Spotify, Apple Music or a browser. No permission pr
 - The display stays awake while a song plays in a visible window.
 - The app is in Japanese when Windows' display language is.
 
-The bar at the bottom shows the cover art, the track, and play / pause, previous / next and seek. Press `?` or the `?` button for these controls:
+The bar at the bottom shows the cover art, the track, where the lyrics came from ("Lyrics: PetitLyrics" and the like), and play / pause, previous / next and seek. Press `?` or the `?` button for these controls:
 
 | Key | |
 |---|---|
