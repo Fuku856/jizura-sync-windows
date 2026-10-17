@@ -1,5 +1,5 @@
 // jizura-sync for Windows: the web app in WebView2, fed by the media sessions Windows keeps for
-// every player (Spotify, Apple Music, a browser tab ...) instead of the Spotify Web API.
+// every player (Spotify, Apple Music, a browser tab ...).
 //
 // Playback comes from the Global System Media Transport Controls -- the same sessions the volume
 // flyout shows: title, artist, cover, timeline and play state, plus play / pause / next / previous

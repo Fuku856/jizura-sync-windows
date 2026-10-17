@@ -1,15 +1,13 @@
 # jizura-sync for Windows
 
-A Windows app that turns the song playing on your PC into real-time lyric motion.
+A Windows app that turns the lyrics of the song playing on your PC into real-time lyric motion.
 
 It follows what plays through Windows' media controls (the media flyout by the volume control), fetches time-synced lyrics, and renders them as a lyric video (文字PV) with [JIZURA](https://github.com/852wa/JIZURA).
 A look is picked for each song automatically; press `R` to switch to a different one.
 
-> An unofficial fork of [Saqoosha/jizura-sync](https://github.com/Saqoosha/jizura-sync) (a macOS app). Please do not send questions about the Windows app upstream.
+> An unofficial fork of [Saqoosha/jizura-sync](https://github.com/Saqoosha/jizura-sync) (a macOS app).
 
 [日本語](README.md)
-
----
 
 ## Features
 
@@ -34,8 +32,6 @@ A look is picked for each song automatically; press `R` to switch to a different
 - **Idle while minimized**\
   Drawing and reading stop and use no CPU.
 
----
-
 ## Using it
 
 - It follows the player that is playing, and switches when you start playing in another one.
@@ -51,22 +47,18 @@ The bar at the bottom shows the cover art, the track, the lyric source and playb
 |---|---|
 | Click, `H` | Hide / show the bar |
 | `R` | Switch to a different look |
-| `U` | Same style within each song section (on, the default) / per line (off) |
+| `U` | Unified look. On (the default): each block of the song (verse, chorus and so on) keeps one look, and a repeated chorus looks the same each time. Off: every lyric line is styled on its own |
 | `K` | Motion: as the look picks → smooth → 12 fps → 8 fps |
 | `[` / `]` | Lyrics 50 ms later / earlier |
 | `Space` | Play / pause |
 | `F`, double-click | Fullscreen |
 | `?`, `Esc` | Open / close the help |
 
----
-
 ## Requirements
 
 - Windows 10 version 2004 or later, or Windows 11 (x64)
 - [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) (x64)
 - WebView2 Runtime (Windows 11 already has it; otherwise install it from [Microsoft](https://developer.microsoft.com/microsoft-edge/webview2/))
-
----
 
 ## Install
 
@@ -78,8 +70,6 @@ The app is not code-signed, so SmartScreen may warn the first time; choose "More
 
 To update, extract the new zip. Settings live in `%LOCALAPPDATA%\jizura-sync` and carry over.
 
----
-
 ## Limitations
 
 - Songs with no synced lyrics in any source, or none within 4 seconds of the track's length, show a title card only.
@@ -89,8 +79,6 @@ To update, extract the new zip. Settings live in `%LOCALAPPDATA%\jizura-sync` an
 - Fonts load from Google Fonts, so offline the looks are not quite right.
 - Not yet tried with Spotify for Windows or Apple Music for Windows (browser tabs are tested).
 - No installer, auto-update or code signing.
-
----
 
 ## For developers
 
@@ -132,27 +120,13 @@ git fetch origin                # origin = Saqoosha/jizura-sync
 git merge origin/main
 ```
 
-An upstream change under `mac/` (deleted in this repo) comes in as a modify/delete conflict; keep the deletion.
+An upstream change to `mac/`, `web/spotify.js` or `tools/deploy-cloudflare.sh` (deleted in this repo) comes in as a modify/delete conflict; keep the deletion. Keep it too when the Spotify or Tesla parts of `web/app.js` and the like conflict.
 
 ```bash
 git -C web/vendor/JIZURA fetch --depth 1 origin main
 git -C web/vendor/JIZURA checkout FETCH_HEAD
 tools/update-jizura-scripts.sh      # regenerates the <script> tags in web/index.html
 ```
-
-<a id="setup"></a>
-
-### Web page for Spotify
-
-As upstream, the page in `web/` also runs in a browser on its own through the Spotify Web API (it has nothing to do with the Windows app). It needs a Spotify **Premium** account and a Client ID from a developer app of your own.
-
-1. Start the page with `./serve.sh` (`http://127.0.0.1:5180/`).
-2. In the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard), choose **Create app**. Under **Redirect URIs**, add exactly `http://127.0.0.1:5180/`, check **Web API**, save, and copy the **Client ID**.
-3. Open <http://127.0.0.1:5180/>, paste the Client ID, then **Connect Spotify**.
-
-Spotify's and Apple's terms do not allow publishing an app like this. Create your own Client ID, and do not host the page as a service for others.
-
----
 
 ## Special Thanks
 
@@ -161,8 +135,6 @@ https://github.com/Saqoosha/jizura-sync
 
 All of the lyric motion is drawn by 852wa's JIZURA.\
 https://github.com/852wa/JIZURA
-
----
 
 ## License
 

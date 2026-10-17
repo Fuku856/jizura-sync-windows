@@ -2,7 +2,6 @@
   --bg: #000;
   --fg: #f4f4f4;
   --dim: rgba(244, 244, 244, 0.55);
-  --accent: #1ed760;
 }
 
 * { box-sizing: border-box; }
@@ -27,70 +26,6 @@ html, body {
 }
 
 [hidden] { display: none !important; }
-
-#gate {
-  position: fixed;
-  inset: 0;
-  display: grid;
-  place-content: center;
-  justify-items: center;
-  gap: 12px;
-  text-align: center;
-  padding: 16px;
-}
-.wordmark { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: 0.08em; }
-.lede { margin: 0; font-size: 18px; color: var(--dim); }
-#connect, #setup button {
-  margin-top: 16px;
-  padding: 12px 28px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--accent);
-  color: #000;
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.secondary {
-  margin-top: 4px;
-  padding: 10px 24px;
-  border: 1px solid var(--dim);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--fg);
-  font: inherit;
-  cursor: pointer;
-}
-
-#setup {
-  display: grid;
-  gap: 8px;
-  justify-items: center;
-  width: min(440px, 100%);
-  margin-top: 12px;
-  user-select: text;
-}
-#setup label { font-weight: 700; }
-#setup input {
-  width: 100%;
-  padding: 10px 14px;
-  border: 1px solid var(--dim);
-  border-radius: 8px;
-  background: #111;
-  color: var(--fg);
-  font: 15px ui-monospace, Menlo, monospace;
-  text-align: center;
-}
-#setup code {
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: #1a1a1a;
-  font: 13px ui-monospace, Menlo, monospace;
-  word-break: break-all;
-}
-.hint { margin: 0; color: var(--dim); font-size: 13px; }
-.hint a { color: var(--fg); }
 
 /* now-playing bar: shown until a click outside it hides it (app.js toggles .bar-hidden) */
 #bar {
@@ -199,18 +134,6 @@ body.bar-hidden #bar { opacity: 0; transform: translateY(12px); pointer-events: 
 #help dl { display: grid; grid-template-columns: auto 1fr; gap: 10px 16px; margin: 0; }
 #help dt { white-space: nowrap; }
 #help dd { margin: 0; color: var(--dim); }
-#help .link {
-  margin-top: 16px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--dim);
-  font: inherit;
-  font-size: 12px;
-  text-decoration: underline;
-  cursor: pointer;
-}
-#help .link:hover { color: var(--fg); }
 kbd {
   display: inline-block;
   min-width: 22px;
@@ -223,9 +146,3 @@ kbd {
 
 body.idle { cursor: none; }
 
-/* Tesla (see app.js): the help's keys are tap targets. */
-.tap-keys #help .hint { margin: -6px 0 14px; }
-.tap-keys #help dl { align-items: center; }
-.tap-keys #help .key { padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
-.tap-keys #help .key kbd { min-width: 44px; padding: 8px 10px; font-size: 14px; }
-.tap-keys #help .key:active kbd { background: rgba(244, 244, 244, 0.2); }

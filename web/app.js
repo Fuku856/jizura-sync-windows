@@ -1,11 +1,10 @@
-// jizura-sync: follow what the signed-in Spotify account is playing (on any device) and
-// render it as a JIZURA lyric motion in real time.
+// jizura-sync: follow what plays on this PC (Windows' media sessions, read by the app in
+// win/Program.cs) and render it as a JIZURA lyric motion in real time.
 //
 // JIZURA's renderer is a pure function of time -- `frame(ctx, plan, t)` draws the instant `t`
 // of a plan built once per song -- so syncing is just handing it the interpolated playback
 // position every animation frame. Seeks, pauses and track skips need no extra state.
 
-import { auth, SpotifyPlayer } from './spotify.js';
 import { fetchLyrics, lrcToJizura } from './lyrics.js';
 import { hasNative, NativePlayer } from './native.js';
 import { t, localizePage } from './i18n.js';
@@ -302,65 +301,6 @@ function tick(now) {
     pace.drawMs += (performance.now() - t0 - pace.drawMs) * 0.05;
 }
 
-// ---------------------------------------------------------------- Spotify
-
-function startPlayer() {
-    $('gate').hidden = true;
-    $('disconnect').hidden = false;
-    showBar();
-    player = new SpotifyPlayer();
-    player.onError((err) => {
-        if (err.kind === 'not-registered') {
-            showGate(t('This Spotify account is not on your app’s User Management list. Add it in the Spotify dashboard and reload — or sign out of Spotify and connect with the right account.'));
-            return;
-        }
-        if (err.kind === 'auth') { showGate(t('{detail}. Connect again.', { detail: err.message })); return; }
-        showError(err.message);
-    });
-    player.start();
-}
-
-/** The gate is the only non-playing screen: set up the client ID, connect, or explain a failure. */
-function showGate(text) {
-    player?.stop();
-    $('notice').hidden = true;
-    player = null;
-    $('gateText').textContent = text;
-    const configured = !!auth.clientId();
-    $('setup').hidden = configured;
-    $('connect').hidden = !configured;
-    $('changeClient').hidden = !configured;
-    $('bar').hidden = true;
-    $('help').hidden = true;
-    $('redirectUri').textContent = auth.redirectUri();
-    $('clientId').value = auth.clientId() || '';
-    $('gate').hidden = false;
-}
-
-$('setup').addEventListener('submit', (e) => {
-    e.preventDefault();
-    auth.setClientId($('clientId').value);
-    showGate(t('Client ID saved. Connect to sign in with Spotify.'));
-});
-$('connect').addEventListener('click', () => {
-    auth.begin().catch((err) => showGate(t('Could not start Spotify sign-in: {detail}', { detail: err.message })));
-});
-$('changeClient').addEventListener('click', () => {
-    $('setup').hidden = false;
-    $('connect').hidden = true;
-    $('changeClient').hidden = true;
-});
-// Forgets this page's tokens. Spotify keeps its own session cookie, so signing in as another
-// account also needs a sign-out at accounts.spotify.com.
-$('disconnect').addEventListener('click', () => {
-    auth.disconnect();
-    $('help').hidden = true;
-    trackId = null; song = null; plan = null;
-    $('notice').hidden = true;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    showGate(t('Disconnected. Access can also be removed at spotify.com/account/apps.'));
-});
-
 // ---------------------------------------------------------------- controls
 
 function read(key) { try { return localStorage.getItem(key); } catch { return null; } }
@@ -412,7 +352,7 @@ function toggleFullscreen() {
     else document.documentElement.requestFullscreen?.();
 }
 
-/** One control, by its key name. Keys and the help window's buttons (no keyboard in a car) share it. */
+/** One control, by its key name. */
 function runKey(key) {
     switch (String(key).toLowerCase()) {
         case 'r':
@@ -439,25 +379,7 @@ window.addEventListener('keydown', (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey || (e.target instanceof HTMLInputElement && e.target.type !== 'range')) return;
     if (runKey(e.key) && e.key === ' ') e.preventDefault();
 });
-// A car's browser has a touchscreen and no keyboard, so there every key in the help becomes a
-// button. Tesla's user agent ends in `Tesla/<version>`; `?tesla` does the same anywhere.
-if (/\bTesla\//.test(navigator.userAgent) || new URLSearchParams(location.search).has('tesla')) {
-    document.body.classList.add('tap-keys');
-    $('help').querySelectorAll('kbd').forEach((kbd) => {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'key';
-        kbd.replaceWith(b);
-        b.append(kbd);
-        // blur: a focused button would repeat on Enter / Space where a keyboard exists (?tesla).
-        b.addEventListener('click', () => { b.blur(); runKey(kbd.textContent === 'Space' ? ' ' : kbd.textContent); });
-    });
-    const hint = document.createElement('p');
-    hint.className = 'hint';
-    hint.textContent = t('Tap a key to use it.');
-    $('help').querySelector('h2').after(hint);
-}
-window.addEventListener('dblclick', (e) => { if (!e.target.closest('#bar, #gate, #help')) toggleFullscreen(); });
+window.addEventListener('dblclick', (e) => { if (!e.target.closest('#bar, #help')) toggleFullscreen(); });
 
 let resizeTimer = 0;
 window.addEventListener('resize', () => {
@@ -533,7 +455,7 @@ for (const ev of ['pointerup', 'pointercancel', 'blur']) $('seek').addEventListe
 // does not flash the bar off and on.
 let clickTimer = 0;
 window.addEventListener('click', (e) => {
-    if (e.target.closest('#bar, #gate, #help, #toast')) return;
+    if (e.target.closest('#bar, #help, #toast')) return;
     clearTimeout(clickTimer);
     if (e.detail > 1) return;
     clickTimer = setTimeout(toggleBar, 250);
@@ -542,8 +464,8 @@ window.addEventListener('click', (e) => {
 // ---------------------------------------------------------------- boot
 
 /**
- * `?mock` (or `?mock=Artist|Title|durationMs`): no Spotify -- a fixed track on a local clock,
- * for trying the lyrics and rendering without an account. `?t=<seconds>` starts there.
+ * `?mock` (or `?mock=Artist|Title|durationMs`): no player -- a fixed track on a local clock,
+ * for trying the lyrics and rendering without playing anything. `?t=<seconds>` starts there.
  */
 class MockPlayer {
     constructor(spec, startS) {
@@ -574,7 +496,7 @@ class MockPlayer {
 function watchDrag(native) {
     let down = null;
     window.addEventListener('pointerdown', (e) => {
-        down = e.button === 0 && !document.fullscreenElement && !e.target.closest('#bar, #help, #gate, #toast') ? [e.screenX, e.screenY] : null;
+        down = e.button === 0 && !document.fullscreenElement && !e.target.closest('#bar, #help, #toast') ? [e.screenX, e.screenY] : null;
     });
     window.addEventListener('pointermove', (e) => {
         if (!down || !(e.buttons & 1)) { down = null; return; }
@@ -583,27 +505,21 @@ function watchDrag(native) {
     window.addEventListener('pointerup', () => { down = null; });
 }
 
-async function boot() {
-    requestAnimationFrame(tick);
+function boot() {
     wake();
     const q = new URLSearchParams(location.search);
+    // Playback comes from the Windows app; a plain browser has nothing to follow but the mock.
+    if (!q.has('mock') && !hasNative()) { showNotice(t('Open this in the jizura-sync Windows app, or add ?mock to the URL')); return; }
+    requestAnimationFrame(tick);
     if (q.has('mock')) { player = new MockPlayer(q.get('mock'), Number(q.get('t')) || 0); showBar(); return; }
-    // Inside the Windows app: the players on this computer, no sign-in.
-    if (hasNative()) {
-        player = new NativePlayer();
-        // A failed read is retried; once it succeeds, the bar goes back to what it said before.
-        let beforeError = null;
-        player.onError((err) => { beforeError ??= $('status').textContent; showError(err.message); });
-        player.onRecover(() => { if (beforeError !== null) setStatus(beforeError); beforeError = null; });
-        player.start();
-        showBar();
-        watchDrag(player);
-        return;
-    }
-    try { await auth.handleRedirect(); } catch (err) { showGate(err.message); return; }
-    if (!auth.clientId()) { showGate(t('Paste the Client ID of your own Spotify app to start.')); return; }
-    if (!auth.isConnected()) { showGate(t("Lyric motion for what's playing on your Spotify")); return; }
-    startPlayer();
+    player = new NativePlayer();
+    // A failed read is retried; once it succeeds, the bar goes back to what it said before.
+    let beforeError = null;
+    player.onError((err) => { beforeError ??= $('status').textContent; showError(err.message); });
+    player.onRecover(() => { if (beforeError !== null) setStatus(beforeError); beforeError = null; });
+    player.start();
+    showBar();
+    watchDrag(player);
 }
 
 // Read-only debug handle: `jizuraSync.plan` in devtools.

@@ -1,5 +1,5 @@
 // Playback from the Windows app (win/Program.cs), which reads the system's media sessions and posts
-// each reading as a web message. Same interface as SpotifyPlayer.
+// each reading as a web message. Same interface as app.js's MockPlayer.
 
 import { t } from './i18n.js';
 

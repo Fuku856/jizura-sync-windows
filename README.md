@@ -1,40 +1,36 @@
 # jizura-sync for Windows
 
-Windows で再生中の曲を、リアルタイムに歌詞モーションにするアプリ。
+Windows で再生中の曲の歌詞を、リアルタイムで歌詞モーションにするアプリ。
 
 再生中の曲を Windows のメディア操作（音量フライアウトに出るもの）から追い、同期歌詞を取得して [JIZURA](https://github.com/852wa/JIZURA) で文字PVとして描く。
 見た目は曲ごとに自動で選ばれ、`R` キーで別の見た目に変わる。
 
-> [Saqoosha/jizura-sync](https://github.com/Saqoosha/jizura-sync)（macOS アプリ）の非公式フォーク。本家に Windows 版の問い合わせをしないこと。
+> [Saqoosha/jizura-sync](https://github.com/Saqoosha/jizura-sync)（macOS アプリ）の非公式フォーク。
 
 [English](README.en.md)
-
----
 
 ## 特徴
 
 - **どのプレイヤーにも追従**\
-  Spotify・Apple Music・ブラウザのタブ（YouTube など）など、Windows のメディア操作に出るものなら何でも追う。権限の許可は要らない
+  Spotify・Apple Music・ブラウザのタブ（YouTube など）など、Windows のメディア操作に出るプレイヤーなら何でも追従します。権限の許可は不要です。
 
 - **4 つの歌詞ソース**\
-  LRCLIB・[プチリリ](https://petitlyrics.com)・[lrc.red](https://lrc.red)・NetEase から探す。使った取得元はバーに表示する
+  LRCLIB・[プチリリ](https://petitlyrics.com)・[lrc.red](https://lrc.red)・NetEase から歌詞を探します。使った取得元はバーに表示されます。
 
 - **描画品質の自動調整**\
-  重いカットでフレームが遅れると、品質を 1 段ずつ下げて滑らかさを保つ
+  重いカットでフレームが遅れると、品質を 1 段ずつ下げて滑らかさを保ちます。
 
 - **軽いトランジション**\
-  カット切り替えの描画を使い回し、負荷を減らした
+  カット切り替えの描画を使い回し、負荷を減らしています。
 
 - **バーから再生を操作**\
-  再生 / 一時停止・前へ / 次へ・シークを、追っているプレイヤーに送る
+  再生 / 一時停止・前へ / 次へ・シークを、追従中のプレイヤーに送ります。
 
 - **ウィンドウまわり**\
-  ページのドラッグで移動、位置と大きさを記憶、ダークモードのタイトルバー
+  ページのドラッグで移動でき、位置と大きさは次回も引き継がれます。タイトルバーはダークモードです。
 
 - **最小化中は停止**\
-  描画も読み取りも止まり、CPU を使わない
-
----
+  描画も読み取りも止まり、CPU を使いません。
 
 ## 使い方
 
@@ -51,22 +47,18 @@ Windows で再生中の曲を、リアルタイムに歌詞モーションにす
 |---|---|
 | クリック、`H` | バーを隠す / 出す |
 | `R` | 別の見た目に変える |
-| `U` | 曲のセクション内で見せ方をそろえる（オン、既定）/ 行ごとに選ぶ（オフ） |
+| `U` | 見せ方の統一。オン（既定）は A メロ・サビなどのまとまりごとに見せ方をそろえ、繰り返すサビは同じ見せ方にする。オフは歌詞 1 行ずつ別々に選ぶ |
 | `K` | 動き: 見た目まかせ → なめらか → 12 fps → 8 fps |
 | `[` / `]` | 歌詞を 50 ms 遅らせる / 早める |
 | `Space` | 再生 / 一時停止 |
 | `F`、ダブルクリック | 全画面 |
 | `?`、`Esc` | ヘルプを開く / 閉じる |
 
----
-
 ## 必要なもの
 
 - Windows 10 バージョン 2004 以降、または Windows 11（x64）
 - [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)（x64）
 - WebView2 Runtime（Windows 11 には最初から入っている。無い場合は [Microsoft のページ](https://developer.microsoft.com/microsoft-edge/webview2/) から入れる）
-
----
 
 ## インストール
 
@@ -78,8 +70,6 @@ Windows で再生中の曲を、リアルタイムに歌詞モーションにす
 
 更新するときは、新しい zip を展開し直す。設定は `%LOCALAPPDATA%\jizura-sync` にあるので引き継がれる。
 
----
-
 ## 制限
 
 - どのソースにも同期歌詞が無い曲や、長さが 4 秒以上ずれた歌詞しか無い曲は、タイトルだけの画面になる
@@ -89,8 +79,6 @@ Windows で再生中の曲を、リアルタイムに歌詞モーションにす
 - 書体は Google Fonts から読み込むので、オフラインでは本来の見た目にならない
 - Spotify for Windows と Apple Music for Windows での動作は未確認（ブラウザのタブでは確認済み）
 - インストーラー、自動アップデート、コード署名は無い
-
----
 
 ## 開発者向け
 
@@ -132,27 +120,13 @@ git fetch origin                # origin = Saqoosha/jizura-sync
 git merge origin/main
 ```
 
-本家が `mac/`（このリポジトリでは削除済み）を変更していると変更と削除の競合になるので、削除のほうを残す。
+本家が `mac/`・`web/spotify.js`・`tools/deploy-cloudflare.sh`（このリポジトリでは削除済み）を変更していると変更と削除の競合になるので、削除のほうを残す。`web/app.js` などで Spotify や Tesla の部分が競合したときも、削除のほうを残す。
 
 ```bash
 git -C web/vendor/JIZURA fetch --depth 1 origin main
 git -C web/vendor/JIZURA checkout FETCH_HEAD
 tools/update-jizura-scripts.sh      # web/index.html の <script> タグを作り直す
 ```
-
-<a id="setup"></a>
-
-### Spotify 用の Web ページ
-
-`web/` のページは、本家と同じくブラウザだけでも Spotify Web API で動く（Windows アプリには関係ない）。Spotify の **Premium** アカウントと、自分で作る開発者アプリの Client ID が要る。
-
-1. `./serve.sh` でページを起動する（`http://127.0.0.1:5180/`）
-2. [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) で **Create app**。**Redirect URIs** に `http://127.0.0.1:5180/` をそのまま入れ、**Web API** にチェックして保存し、**Client ID** をコピーする
-3. <http://127.0.0.1:5180/> を開き、Client ID を貼って **Spotify に接続**
-
-Spotify と Apple の規約は、このような app の公開を認めていない。Client ID は自分で作り、ページを他人向けのサービスとしてホストしないこと。
-
----
 
 ## Special Thanks
 
@@ -161,8 +135,6 @@ https://github.com/Saqoosha/jizura-sync
 
 All of the lyric motion is drawn by 852wa's JIZURA.\
 https://github.com/852wa/JIZURA
-
----
 
 ## ライセンス
 

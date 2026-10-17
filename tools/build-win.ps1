@@ -17,7 +17,7 @@ if (-not (Test-Path (Join-Path $root 'web/vendor/JIZURA/src/01_util.js'))) {
     throw 'JIZURA submodule missing -- run: git submodule update --init'
 }
 # A syntax error blanks the whole page with no UI at all.
-foreach ($f in 'app.js', 'spotify.js', 'lyrics.js', 'native.js', 'i18n.js') {
+foreach ($f in 'app.js', 'lyrics.js', 'native.js', 'i18n.js') {
     # cmd's redirect, not a PowerShell pipe: Windows PowerShell re-encodes piped text and breaks UTF-8.
     cmd /c "node --input-type=module --check < `"$(Join-Path $root "web/$f")`""
     if ($LASTEXITCODE) { throw "node --check failed: web/$f" }
