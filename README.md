@@ -20,7 +20,7 @@ Windows で再生中の曲を、リアルタイムに歌詞モーションにす
 | 追えるプレイヤー | Spotify とミュージックApp だけ | Windows のメディア操作に出るものすべて（Spotify、Apple Music、ブラウザのタブ、その他） |
 | 再生状態の取得 | Apple Events | Windows のメディアセッション（GSMTC） |
 | 権限の許可 | 初回にオートメーションの許可が要る | 不要 |
-| 配布 | 公証済みビルド、自動アップデート | ソースからビルド（インストーラー・自動アップデートは未対応） |
+| 配布 | 公証済みビルド、自動アップデート | GitHub Releases の zip（インストーラー・自動アップデート・コード署名は無し） |
 
 ### Windows 版で追加・改善したこと
 
@@ -38,26 +38,30 @@ Windows で再生中の曲を、リアルタイムに歌詞モーションにす
 ## 必要なもの
 
 - Windows 10 バージョン 2004 以降、または Windows 11（x64）
-- [.NET 10 SDK](https://dotnet.microsoft.com/download)（ビルド用。実行だけなら .NET 10 Desktop Runtime）
-- [Node.js](https://nodejs.org/)（ビルド時のページの構文チェック用）
-- [Git](https://git-scm.com/)
+- [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)（x64）
 - WebView2 Runtime（Windows 11 には最初から入っている。無い場合は [Microsoft のページ](https://developer.microsoft.com/microsoft-edge/webview2/) から入れる）
 
 ## インストール
 
-Windows 向けの配布ビルドはまだ無いので、ソースからビルドする。PowerShell で:
+1. [Releases](https://github.com/Fuku856/jizura-sync-windows/releases) から `jizura-sync-<バージョン>-win-x64.zip` をダウンロードする（今はプレリリースだけ）
+2. 好きな場所に展開し、`jizura-sync.exe` を起動する。`WebView2Loader.dll` と `web` フォルダは exe の隣に置いたままにする
+3. Spotify や Apple Music、ブラウザで曲を再生する。権限の許可は要らない
+
+コード署名をしていないので、初回は Windows SmartScreen の警告が出ることがある。その場合は「詳細情報」→「実行」で起動する。更新するときは、新しい zip を展開し直す（設定は `%LOCALAPPDATA%\jizura-sync` にあるので引き継がれる）。
+
+### ソースからビルドする
+
+[.NET 10 SDK](https://dotnet.microsoft.com/download)、[Node.js](https://nodejs.org/)（ページの構文チェック用）、[Git](https://git-scm.com/) が要る。PowerShell で:
 
 ```powershell
-git clone --recursive -b windows https://github.com/Fuku856/jizura-sync-windows.git
-cd jizura-sync
+git clone --recursive https://github.com/Fuku856/jizura-sync-windows.git
+cd jizura-sync-windows
 powershell -ExecutionPolicy Bypass -File tools/build-win.ps1
 ```
 
-`build\win\jizura-sync.exe` ができるので、それを起動する。`build\win` フォルダごと好きな場所に移してよい（`WebView2Loader.dll` と `web` フォルダが exe の隣に要る）。
+`build\win` に `jizura-sync.exe`・`WebView2Loader.dll`・`web` ができる（合わせて約 5 MB）。`--recursive` を付けずに clone したときは、`git submodule update --init` を実行してからビルドする。
 
-`--recursive` を付けずに clone したときは `git submodule update --init` を実行してからビルドする。
-
-起動したら、Spotify や Apple Music、ブラウザで曲を再生する。権限の許可は要らない。
+`main` が最新のリリース、`dev` が開発中の版（プレリリース）にあたる。
 
 ## 使い方
 
@@ -135,6 +139,14 @@ powershell -ExecutionPolicy Bypass -File tools/build-win.ps1
 
 **Spotify と Apple の規約は、このような app の公開を認めていない**（Spotify Developer Policy III は音源と映像の同期を禁じ、Apple の MusicKit の規約も他のコンテンツとの同期を禁じている）。Client ID は自分で作り、ほかのプロジェクトのものを流用しないこと。Web ページを他人向けのサービスとしてホストしないこと。
 
+### リリース
+
+GitHub でリリースを公開すると、[`release-windows.yml`](.github/workflows/release-windows.yml) がそのタグをビルドして zip を添付し、リリースノートを書く。
+
+- タグがバージョンになる: `v1.2.3`、プレリリースは `v1.2.3-beta.1` のように付ける
+- リリースは Target を `main`、プレリリースは `dev` にして作る。タグがそのブランチに無いとビルドは失敗する
+- 本文は、前回のリリースからの PR 一覧（GitHub の自動生成）で上書きされる。リポジトリに `CLAUDE_CODE_OAUTH_TOKEN` シークレットがあれば、その上に Claude が書いた利用者向けの要約が付く
+
 ### 本家の更新を取り込む
 
 このリポジトリは Windows 専用で、本家の Mac アプリ（`mac/`、Sparkle、署名・公証・リリースのスクリプト）は削除した。Spotify 用の Web ページと Tesla 向けのデプロイは残しているので、本家の `web/` の変更はそのまま取り込める。
@@ -156,11 +168,13 @@ tools/update-jizura-scripts.sh      # web/index.html の <script> タグを作�
 
 ページは JIZURA の `src/*.js` をファイル名順に直接読み込む。エディタ UI の `src/12_ui.js` は読まず、Windows のビルドではさらに音声解析の `10_audio.js` と書き出しの `11_export.js` も外す。
 
-## 謝辞
+## Special Thanks
 
-歌詞モーションはすべて、[852wa](https://github.com/852wa) さんの [JIZURA](https://github.com/852wa/JIZURA) によるもの。画面に出るレイアウト・動き・装飾・ランダムな見た目は、どれも JIZURA の仕事。エディタや動画書き出しを備えた本家は <https://852wa.github.io/JIZURA/> で試せる。
+This repository is forked from Saqoosha's jizura-sync.\
+https://github.com/Saqoosha/jizura-sync
 
-アプリの土台は [Saqoosha](https://github.com/Saqoosha) さんの [jizura-sync](https://github.com/Saqoosha/jizura-sync)。このフォークは、それに Windows のホストと描画の改善を足したもの。どちらも MIT ライセンスで公開されていたから、この Windows 版を作れた。感謝。
+All of the lyric motion is drawn by 852wa's JIZURA.\
+https://github.com/852wa/JIZURA
 
 ## ライセンス
 
