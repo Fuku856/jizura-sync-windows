@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Usage and architecture are in README.md. This file holds what the code does not say.
+Usage, building and releasing are in README.md. This file holds the architecture and what the code does not say.
 
 - **`web/vendor/JIZURA` is upstream JIZURA as a submodule — never edit it.** The page loads its `src/*.js` directly as classic scripts (global `J`); `tools/update-jizura-scripts.sh` writes the `<script>` list into `web/index.html` between the `jizura:begin` / `jizura:end` markers, in byte order (`LC_ALL=C`, matching upstream's `sorted(glob)`), minus `12_ui.js`. Change what JIZURA does through the project / plan values `app.js` passes in, not by patching it.
 - **JIZURA's renderer is a pure function of time.** Sync is `frame(ctx, plan, positionMs + offsetMs)` every animation frame; there is no sync state to keep.

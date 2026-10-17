@@ -12,20 +12,11 @@ Windows で再生中の曲を、リアルタイムに歌詞モーションにす
 
 [English](README.en.md)
 
-## 本家との違い
+## Windows 版で追加・改善したこと
 
-| | 本家（macOS） | このフォーク（Windows） |
-|---|---|---|
-| 対応 OS | macOS 14 以降 | Windows 10 (2004) 以降 / Windows 11 |
-| 追えるプレイヤー | Spotify とミュージックApp だけ | Windows のメディア操作に出るものすべて（Spotify、Apple Music、ブラウザのタブ、その他） |
-| 再生状態の取得 | Apple Events | Windows のメディアセッション（GSMTC） |
-| 権限の許可 | 初回にオートメーションの許可が要る | 不要 |
-| 配布 | 公証済みビルド、自動アップデート | GitHub Releases の zip（インストーラー・自動アップデート・コード署名は無し） |
-
-### Windows 版で追加・改善したこと
-
-- **どのプレイヤーにも追従**: Spotify と Apple Music に限らず、ブラウザで再生している曲にも追従する。再生中のセッションを優先し、何も再生していない間は最後に追っていたものに留まる。バーの再生 / 一時停止・前へ / 次へ・シークは、追っているプレイヤーに送られる
-- **描画品質の自動調整**（本家にない機能）: JIZURA のカットの中には、1 フレームの時間を大きく超えるもの（円柱・グリッチグリッド系など）がある。フレームが遅れ始めると、ぼかし・ブルームを省く → 解像度を 0.75 倍 → 色ずれの残像を省く → 解像度を 0.5 倍 → 30 fps、の順に 1 段ずつ軽くし、3 秒間遅れがなければ 1 段戻す。計測では、重いカットが 18 fps から 68 fps まで回復した。120 Hz などの高リフレッシュレートのディスプレイでも、描くのは plan の 60 fps の刻みだけにして無駄を省く
+- **どのプレイヤーにも追従**: Spotify と Apple Music に限らず、ブラウザで再生している曲にも追従する。再生中のセッションを優先し、何も再生していない間は最後に追っていたものに留まる。バーの再生 / 一時停止・前へ / 次へ・シークは、追っているプレイヤーに送られる。権限の許可は要らない
+- **歌詞の取得元を追加**: LRCLIB に加えて、プチリリ・lrc.red・NetEase からも探す。邦楽で歌詞が見つかる曲が大きく増えた。使った取得元はバーに表示する
+- **描画品質の自動調整**: JIZURA のカットの中には、1 フレームの時間を大きく超えるもの（円柱・グリッチグリッド系など）がある。フレームが遅れ始めると、ぼかし・ブルームを省く → 解像度を 0.75 倍 → 色ずれの残像を省く → 解像度を 0.5 倍 → 30 fps、の順に 1 段ずつ軽くし、3 秒間遅れがなければ 1 段戻す。計測では、重いカットが 18 fps から 68 fps まで回復した。120 Hz などの高リフレッシュレートのディスプレイでも、描くのは plan の 60 fps の刻みだけにして無駄を省く
 - **トランジションの描画を軽く**: カット切り替えのたびに前のカットの静止画を毎フレーム描き直していたのを、同じ絵なので使い回すようにした。キャンバスを不透明にして合成の手間も減らした
 - **ジャケットが後から届いても表示**: ブラウザなどは曲名より後にジャケット画像を出すので、届いた時点でバーに反映する
 - **シーク直後にスライダーが戻らない**: ブラウザはシークを少し遅れて反映するので、反映されるまで（最大 1 秒）古い位置の読み取りを無視する
@@ -59,9 +50,7 @@ cd jizura-sync-windows
 powershell -ExecutionPolicy Bypass -File tools/build-win.ps1
 ```
 
-`build\win` に `jizura-sync.exe`・`WebView2Loader.dll`・`web` ができる（合わせて約 5 MB）。`--recursive` を付けずに clone したときは、`git submodule update --init` を実行してからビルドする。
-
-`main` が最新のリリース、`dev` が開発中の版（プレリリース）にあたる。
+`build\win` に `jizura-sync.exe`・`WebView2Loader.dll`・`web` ができる。`--recursive` を付けずに clone したときは、`git submodule update --init` を実行してからビルドする。
 
 ## 使い方
 
@@ -104,69 +93,51 @@ powershell -ExecutionPolicy Bypass -File tools/build-win.ps1
 
 ## 開発者向け
 
-### デバッグ用の環境変数
+ビルドは[ソースからビルドする](#ソースからビルドする)を参照。コードと設計のメモ、変更の確かめ方は [AGENTS.md](AGENTS.md) にある。
 
-`build\win\jizura-sync.exe` を次の環境変数付きで起動できる。
+### デバッグ
+
+`build\win\jizura-sync.exe` を次の環境変数付きで起動する。
 
 | 変数 | |
 |---|---|
-| `JIZURA_WEB_ROOT=<リポジトリ>\web` | ビルドに含めたページではなく、チェックアウトの `web/` を読む。編集して `F5` で再読み込み |
-| `JIZURA_QUERY=mock=Artist\|Title\|durationMs&t=30` | プレイヤーなしで、固定の曲をページ内の時計で再生する。`quality=N` で描画品質を段階 N（0〜5）に固定 |
-| `JIZURA_LOG=<ファイル>` | 読み取りとセッションのイベントをすべて記録する |
-| `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333` | ページに CDP でつなげる（`http://127.0.0.1:9333/json`） |
-
-開発者ツールのコンソールでは `jizuraSync.perf` で描画品質の段階・キャンバスの大きさ・フレーム時間、`jizuraSync.plan` / `.song` で現在の plan と歌詞を見られる。
-
-### 仕組み
-
-- **再生状態**: Windows の Global System Media Transport Controls（音量フライアウトと同じセッション）から、曲名・アーティスト・ジャケット・再生位置・再生状態を読む。曲・再生状態・再生位置が変わったという通知のたびにすぐ読み、再生中は 1 秒ごとにも読む。一時停止中や再生なしのときは通知を待つだけ。セッションは別プロセスのものなので、各呼び出しに 2 秒のタイムアウトを付けている
-- **歌詞**: LRCLIB → プチリリ → lrc.red → NetEase の順に優先し、4 つに同時に問い合わせて、タイミング付きの歌詞を最初に持っているソースを使う。どれもアーティスト・曲名・長さが合う候補だけを採る（カバー版を拾わないため）。プチリリは邦楽に強く、単語単位のタイミングを持つ。NetEase は CORS ヘッダを返さないので Windows アプリだけが使う（ホストが代わりに取得する）。LRCLIB が一時的に落ちているときは 2 回まで再試行するが、下位のソースがすでに歌詞を持っていれば 3 秒で見切る。どのソースの歌詞も LRC にそろえてから JIZURA に渡すので、変換で行うのは JIZURA の記号のエスケープと、セクションの区切りだけ
-- **描画**: ウィンドウは WinForms + WebView2 で、中身は `web/` のページ。ページは `https://app.jizura-sync.test/` の仮想ホストで配信する（この origin がページの localStorage を持つので変えないこと）。JIZURA は曲全体の plan を 1 回だけ作り、レンダラは時刻の純関数なので、毎フレーム現在の再生位置の瞬間を描くだけで同期する
-
-コードと設計の詳しいメモは [AGENTS.md](AGENTS.md) にある。
-
-<a id="setup"></a>
-
-### Spotify 用の Web ページ
-
-`web/` のページは、本家と同じくブラウザだけでも動く。Spotify Web API を通して、どのデバイスで再生している Spotify にも追従する。Spotify の **Premium** アカウントと、自分で作る無料の開発者アプリ（Client ID）が要る。Windows アプリには関係なく、使わないなら読まなくてよい。
-
-1. `./serve.sh` でページを起動する（`http://127.0.0.1:5180/`、bash が要る）
-2. [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) で **Create app**。**Redirect URIs** に `http://127.0.0.1:5180/` をそのまま入れ（末尾の `/` も要る。`localhost` は拒否される）、**Web API** にチェックして保存し、**Client ID** をコピーする
-3. <http://127.0.0.1:5180/> を開き、Client ID を貼って **Spotify に接続**
-
-ほかのアカウントで使う、ポートを変える、自分でホストする、Tesla のブラウザで使う、といった詳しい手順は [本家の README](https://github.com/Saqoosha/jizura-sync#web-page-for-spotify) にある。
-
-**Spotify と Apple の規約は、このような app の公開を認めていない**（Spotify Developer Policy III は音源と映像の同期を禁じ、Apple の MusicKit の規約も他のコンテンツとの同期を禁じている）。Client ID は自分で作り、ほかのプロジェクトのものを流用しないこと。Web ページを他人向けのサービスとしてホストしないこと。
+| `JIZURA_WEB_ROOT=<リポジトリ>\web` | チェックアウトの `web/` を読む。編集して `F5` で再読み込み |
+| `JIZURA_QUERY=mock=Artist\|Title\|durationMs&t=30` | プレイヤーなしで、固定の曲をページ内の時計で再生する |
+| `JIZURA_LOG=<ファイル>` | 読み取りとセッションのイベントを記録する |
 
 ### リリース
 
-GitHub でリリースを公開すると、[`release-windows.yml`](.github/workflows/release-windows.yml) がそのタグをビルドして zip を添付し、リリースノートを書く。
+`main` が最新のリリース、`dev` が開発中の版にあたる。GitHub でリリースを公開すると、[`release-windows.yml`](.github/workflows/release-windows.yml) がそのタグをビルドして zip を添付し、リリースノートを書く。
 
-- タグがバージョンになる: `v1.2.3`、プレリリースは `v1.2.3-beta.1` のように付ける
-- リリースは Target を `main`、プレリリースは `dev` にして作る。タグがそのブランチに無いとビルドは失敗する
-- 本文は、前回のリリースからの PR 一覧（GitHub の自動生成）で上書きされる。リポジトリに `CLAUDE_CODE_OAUTH_TOKEN` シークレットがあれば、その上に Claude が書いた利用者向けの要約が付く
+- タグがバージョンになる（`v1.2.3`、プレリリースは `v1.2.3-beta.1`）
+- リリースは Target を `main`、プレリリースは `dev` にして作る
 
-### 本家の更新を取り込む
-
-このリポジトリは Windows 専用で、本家の Mac アプリ（`mac/`、Sparkle、署名・公証・リリースのスクリプト）は削除した。Spotify 用の Web ページと Tesla 向けのデプロイは残しているので、本家の `web/` の変更はそのまま取り込める。
+### 本家と JIZURA の更新を取り込む
 
 ```powershell
 git fetch origin                # origin = Saqoosha/jizura-sync
 git merge origin/main
 ```
 
-本家が `mac/` を変更していると、変更と削除の競合になる。そのときは削除のほうを残す（`git rm` で解決する）。
-
-### JIZURA の更新
+本家が `mac/`（このリポジトリでは削除済み）を変更していると変更と削除の競合になるので、削除のほうを残す。
 
 ```bash
 git -C web/vendor/JIZURA fetch --depth 1 origin main
 git -C web/vendor/JIZURA checkout FETCH_HEAD
-tools/update-jizura-scripts.sh      # web/index.html の <script> タグを作り直す（bash が要る）
+tools/update-jizura-scripts.sh      # web/index.html の <script> タグを作り直す
 ```
 
-ページは JIZURA の `src/*.js` をファイル名順に直接読み込む。エディタ UI の `src/12_ui.js` は読まず、Windows のビルドではさらに音声解析の `10_audio.js` と書き出しの `11_export.js` も外す。
+<a id="setup"></a>
+
+### Spotify 用の Web ページ
+
+`web/` のページは、本家と同じくブラウザだけでも Spotify Web API で動く（Windows アプリには関係ない）。Spotify の **Premium** アカウントと、自分で作る開発者アプリの Client ID が要る。
+
+1. `./serve.sh` でページを起動する（`http://127.0.0.1:5180/`）
+2. [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) で **Create app**。**Redirect URIs** に `http://127.0.0.1:5180/` をそのまま入れ、**Web API** にチェックして保存し、**Client ID** をコピーする
+3. <http://127.0.0.1:5180/> を開き、Client ID を貼って **Spotify に接続**
+
+Spotify と Apple の規約は、このような app の公開を認めていない。Client ID は自分で作り、ページを他人向けのサービスとしてホストしないこと。
 
 ## Special Thanks
 

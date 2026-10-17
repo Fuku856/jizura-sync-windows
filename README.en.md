@@ -12,20 +12,11 @@ A look is picked for each song automatically. Press the `R` key in the window to
 >
 > **A personal project, not a service.** The lyrics come from LRCLIB and other unofficial sources and are not licensed. Read the [disclaimer](#disclaimer) before sharing what you make with it.
 
-## Differences from upstream
+## What the Windows app adds or improves
 
-| | Upstream (macOS) | This fork (Windows) |
-|---|---|---|
-| OS | macOS 14 and later | Windows 10 (2004) and later / Windows 11 |
-| Players it follows | Spotify and the Music app only | Anything in Windows' media controls (Spotify, Apple Music, browser tabs, others) |
-| How it reads playback | Apple Events | Windows' media sessions (GSMTC) |
-| Permission prompt | Automation, on first use | None |
-| Distribution | Notarized builds, auto-update | A zip on GitHub Releases (no installer, auto-update or code signing) |
-
-### What the Windows app adds or improves
-
-- **Follows any player.** Not only Spotify and Apple Music but also songs playing in a browser. A session that is playing wins; while nothing plays it stays on the one it followed last. Play / pause, previous / next and seek in the bar go back to that player.
-- **Drawing quality adapts to the machine** (not in upstream). Some JIZURA cuts (cylinder, glitch grid and the like) take far longer than a frame to draw. While frames come late, the app steps down one level at a time: no blur or bloom → 0.75× resolution → no chromatic ghost passes → 0.5× resolution → 30 fps. After 3 s with no late frame it steps back up one level. In measurements, a heavy cut went from 18 fps to 68 fps. On high-refresh displays such as 120 Hz, it draws only on the plan's 60 fps grid.
+- **Follows any player.** Not only Spotify and Apple Music but also songs playing in a browser. A session that is playing wins; while nothing plays it stays on the one it followed last. Play / pause, previous / next and seek in the bar go back to that player. No permission prompt is needed.
+- **More lyric sources.** Besides LRCLIB, it also looks in PetitLyrics, lrc.red and NetEase, which finds lyrics for many more Japanese songs. The bar shows which source was used.
+- **Drawing quality adapts to the machine.** Some JIZURA cuts (cylinder, glitch grid and the like) take far longer than a frame to draw. While frames come late, the app steps down one level at a time: no blur or bloom → 0.75× resolution → no chromatic ghost passes → 0.5× resolution → 30 fps. After 3 s with no late frame it steps back up one level. In measurements, a heavy cut went from 18 fps to 68 fps. On high-refresh displays such as 120 Hz, it draws only on the plan's 60 fps grid.
 - **Lighter transitions.** A cut-to-cut transition redrew the previous cut's resting frame on every frame; it is the same picture each time, so it is now kept and reused. The canvas is opaque, which saves compositing.
 - **Covers that arrive late still show.** Browsers and some players send the cover after the title; the bar picks it up when it arrives.
 - **The seek slider stays where you put it.** A browser applies a seek a little later, so readings that still carry the old position are ignored until the seek lands (1 s at most).
@@ -59,9 +50,7 @@ cd jizura-sync-windows
 powershell -ExecutionPolicy Bypass -File tools/build-win.ps1
 ```
 
-This makes `jizura-sync.exe`, `WebView2Loader.dll` and `web` in `build\win` (about 5 MB in all). Cloned without `--recursive`? Run `git submodule update --init` before building.
-
-`main` is the latest release; `dev` is the version in development (pre-releases).
+This makes `jizura-sync.exe`, `WebView2Loader.dll` and `web` in `build\win`. Cloned without `--recursive`? Run `git submodule update --init` before building.
 
 ## Using it
 
@@ -104,69 +93,51 @@ This project is a personal experiment. It is not affiliated with, endorsed by, o
 
 ## For developers
 
-### Debugging environment variables
+For building, see [Building from source](#building-from-source). Notes on the code and design, and how to check changes, are in [AGENTS.md](AGENTS.md).
+
+### Debugging
 
 Run `build\win\jizura-sync.exe` with these set:
 
 | Variable | |
 |---|---|
-| `JIZURA_WEB_ROOT=<repo>\web` | Serve the page from the checkout's `web/` instead of the built copy. Edit, then `F5` to reload |
-| `JIZURA_QUERY=mock=Artist\|Title\|durationMs&t=30` | Play a fixed song on a local clock with no player. `quality=N` pins drawing quality at level N (0–5) |
-| `JIZURA_LOG=<file>` | Log every reading and session event |
-| `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333` | Open CDP on the page (`http://127.0.0.1:9333/json`) |
-
-In the devtools console, `jizuraSync.perf` shows the quality level, canvas size and frame time; `jizuraSync.plan` / `.song` show the current plan and lyrics.
-
-### How it works
-
-- **Playback.** The app reads title, artist, cover, position and play state from Windows' Global System Media Transport Controls (the same sessions the volume flyout shows). It reads right away whenever a session announces a change of track, play state or timeline, and also once a second while something plays. Paused or idle, it only waits for events. Sessions belong to other processes, so every call has a 2 s timeout.
-- **Lyrics.** LRCLIB, PetitLyrics, lrc.red and NetEase are asked at once, and the first in that order with time-synced lyrics wins. Each only counts a hit with the same artist, title and duration, so covers are not picked up. PetitLyrics is strongest on Japanese songs and has word timing. NetEase sends no CORS headers, so only the Windows app uses it (the host fetches it). A lookup that hits an LRCLIB outage is retried twice, but no longer than 3 s once a lower source has lyrics. Every source is turned into LRC, which is close to JIZURA's own lyric format, so the conversion only escapes JIZURA's markup characters and marks song sections.
-- **Rendering.** The window is WinForms + WebView2 running the page in `web/`, served from the virtual host `https://app.jizura-sync.test/` (that origin owns the page's localStorage, so do not change it). JIZURA builds a plan for the whole song once, and its renderer is a pure function of time, so drawing the current playback position every frame is all the sync there is.
-
-Detailed notes on the code and design are in [AGENTS.md](AGENTS.md).
-
-<a id="setup"></a>
-
-### Web page for Spotify
-
-As upstream, the page in `web/` also runs in a browser on its own, following Spotify playing on any device through the Spotify Web API. It needs a Spotify **Premium** account and a free developer app (Client ID) of your own. It has nothing to do with the Windows app; skip this if you do not use it.
-
-1. Start the page with `./serve.sh` (`http://127.0.0.1:5180/`, needs bash).
-2. In the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard), choose **Create app**. Under **Redirect URIs**, add exactly `http://127.0.0.1:5180/` (with the trailing slash; `localhost` is rejected), check **Web API**, save, and copy the **Client ID**.
-3. Open <http://127.0.0.1:5180/>, paste the Client ID, then **Connect Spotify**.
-
-Other accounts, another port, your own hosting and Tesla's browser are covered in [upstream's README](https://github.com/Saqoosha/jizura-sync#web-page-for-spotify).
-
-**Spotify's and Apple's terms do not allow publishing an app like this** (Spotify Developer Policy III forbids synchronizing sound recordings with visual media, and Apple's MusicKit terms forbid synchronizing with other content). Create your own Client ID rather than reusing another project's, and do not host the web page as a service for others.
+| `JIZURA_WEB_ROOT=<repo>\web` | Serve the page from the checkout's `web/`. Edit, then `F5` to reload |
+| `JIZURA_QUERY=mock=Artist\|Title\|durationMs&t=30` | Play a fixed song on a local clock with no player |
+| `JIZURA_LOG=<file>` | Log readings and session events |
 
 ### Releases
 
-Publishing a release on GitHub runs [`release-windows.yml`](.github/workflows/release-windows.yml), which builds that tag, attaches the zip and writes the release notes.
+`main` is the latest release and `dev` the version in development. Publishing a release on GitHub runs [`release-windows.yml`](.github/workflows/release-windows.yml), which builds that tag, attaches the zip and writes the release notes.
 
-- The tag is the version: `v1.2.3`, or `v1.2.3-beta.1` for a pre-release.
-- Create a release with Target `main` and a pre-release with Target `dev`. The build fails if the tag is not on that branch.
-- The body is overwritten with the PRs since the previous release (generated by GitHub), headed by a summary for users written by Claude when the repo has the `CLAUDE_CODE_OAUTH_TOKEN` secret.
+- The tag is the version (`v1.2.3`, or `v1.2.3-beta.1` for a pre-release).
+- Create a release with Target `main` and a pre-release with Target `dev`.
 
-### Merging upstream
-
-This repo is Windows-only: upstream's Mac app (`mac/`, Sparkle, and the signing, notarization and release scripts) was removed. The Spotify web page and the Tesla deploy stay, so upstream's `web/` changes still merge.
+### Merging upstream and JIZURA
 
 ```powershell
 git fetch origin                # origin = Saqoosha/jizura-sync
 git merge origin/main
 ```
 
-An upstream change under `mac/` comes in as a modify/delete conflict; keep the deletion (resolve it with `git rm`).
-
-### Updating JIZURA
+An upstream change under `mac/` (deleted in this repo) comes in as a modify/delete conflict; keep the deletion.
 
 ```bash
 git -C web/vendor/JIZURA fetch --depth 1 origin main
 git -C web/vendor/JIZURA checkout FETCH_HEAD
-tools/update-jizura-scripts.sh      # regenerates the <script> tags in web/index.html (needs bash)
+tools/update-jizura-scripts.sh      # regenerates the <script> tags in web/index.html
 ```
 
-The page loads JIZURA's `src/*.js` directly, in filename order, and skips its editor UI `src/12_ui.js`. The Windows build also leaves out the audio analysis `10_audio.js` and the export `11_export.js`.
+<a id="setup"></a>
+
+### Web page for Spotify
+
+As upstream, the page in `web/` also runs in a browser on its own through the Spotify Web API (it has nothing to do with the Windows app). It needs a Spotify **Premium** account and a Client ID from a developer app of your own.
+
+1. Start the page with `./serve.sh` (`http://127.0.0.1:5180/`).
+2. In the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard), choose **Create app**. Under **Redirect URIs**, add exactly `http://127.0.0.1:5180/`, check **Web API**, save, and copy the **Client ID**.
+3. Open <http://127.0.0.1:5180/>, paste the Client ID, then **Connect Spotify**.
+
+Spotify's and Apple's terms do not allow publishing an app like this. Create your own Client ID, and do not host the page as a service for others.
 
 ## Special Thanks
 
