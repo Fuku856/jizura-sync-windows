@@ -13,7 +13,7 @@ export const hasNative = () => !!webview();
 
 /** How long the page waits for the host's answer to `nativeHttp` (the host itself gives up at 10 s). */
 const HTTP_TIMEOUT_MS = 15000;
-const httpWaiting = new Map();      // id -> { resolve, reject, timer }
+const httpWaiting = new Map();      // id -> { resolve, reject }, each also clearing its timer and abort listener
 let httpId = 0;
 let httpListening = false;
 
@@ -21,24 +21,32 @@ let httpListening = false;
  * GET (or POST `form` as application/x-www-form-urlencoded) through the Windows host, for lyric
  * catalogues that send no CORS headers. The host allows only the hosts it lists (Program.cs
  * `HttpHosts`). Resolves with `{status, body}`; rejects with an error kind as the message: `host`
- * (refused), `timeout` or `network`.
+ * (refused), `timeout` or `network`. An aborted `signal` rejects at once with its reason; the
+ * host still finishes the request, and its answer is dropped.
  */
-export function nativeHttp(url, form = null) {
+export function nativeHttp(url, form = null, signal = null) {
     if (!httpListening) {
         webview().addEventListener('message', (e) => {
             const w = e.data?.http !== undefined && httpWaiting.get(e.data.http);
             if (!w) return;
-            httpWaiting.delete(e.data.http);
-            clearTimeout(w.timer);
             if (e.data.error) w.reject(new Error(e.data.error));
             else w.resolve({ status: e.data.status, body: e.data.body });
         });
         httpListening = true;
     }
+    if (signal?.aborted) return Promise.reject(signal.reason);
     const id = ++httpId;
     return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => { httpWaiting.delete(id); reject(new Error('timeout')); }, HTTP_TIMEOUT_MS);
-        httpWaiting.set(id, { resolve, reject, timer });
+        const settle = (fn) => (v) => {
+            httpWaiting.delete(id);
+            clearTimeout(timer);
+            signal?.removeEventListener('abort', onAbort);
+            fn(v);
+        };
+        const onAbort = () => settle(reject)(signal.reason);
+        const timer = setTimeout(() => settle(reject)(new Error('timeout')), HTTP_TIMEOUT_MS);
+        httpWaiting.set(id, { resolve: settle(resolve), reject: settle(reject) });
+        signal?.addEventListener('abort', onAbort, { once: true });
         webview().postMessage({ cmd: 'http', id, url, form });
     });
 }

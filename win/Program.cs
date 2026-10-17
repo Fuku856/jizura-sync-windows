@@ -336,7 +336,8 @@ sealed class PlayerBridge
         // as WinRT's AppInfo.GetFromAppUserModelId gives it -- which would need a projection of most of
         // Windows.ApplicationModel and Windows.Storage.
         name = null;
-        if (SHCreateItemFromParsingName(@"shell:AppsFolder\" + id, IntPtr.Zero, typeof(IShellItem).GUID, out var item) == 0)
+        // An empty ID would name shell:AppsFolder itself ("Applications").
+        if (id.Length > 0 && SHCreateItemFromParsingName(@"shell:AppsFolder\" + id, IntPtr.Zero, typeof(IShellItem).GUID, out var item) == 0)
         {
             if (item.GetDisplayName(0 /* SIGDN_NORMALDISPLAY */, out var text) == 0)
             {
@@ -561,7 +562,10 @@ sealed class MainForm : Form
             answer["error"] = e is TaskCanceledException ? "timeout" : "network";
             Program.Log($"http {target} failed: {e.Message}");
         }
-        web.CoreWebView2?.PostWebMessageAsJson(answer.ToJsonString());
+        // The window may have closed during the request; an exception here would end the process (async void).
+        if (IsDisposed || web.IsDisposed) return;
+        try { web.CoreWebView2?.PostWebMessageAsJson(answer.ToJsonString()); }
+        catch (Exception e) when (e is InvalidOperationException or ObjectDisposedException) { Program.Log($"http {target} answer dropped: {e.Message}"); }
     }
 
     protected override void OnResize(EventArgs e)
