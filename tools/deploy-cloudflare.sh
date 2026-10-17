@@ -8,7 +8,7 @@
 # `jizura-sync.clientId` when the browser has none, so "Change Client ID" still works -- and a
 # browser that already has an ID keeps it after a redeploy with another one. Register
 # https://<worker-name>.<your-subdomain>.workers.dev/ as a Redirect URI on the Spotify app.
-# This is for your own devices only -- see the README disclaimer.
+# This is for your own devices only -- see "Why this is not a public service" in AGENTS.md.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
