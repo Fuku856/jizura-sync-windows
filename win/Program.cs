@@ -520,7 +520,8 @@ sealed class MainForm : Form
 
     static HttpClient CreateHttpClient()
     {
-        var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10), MaxResponseContentBufferSize = 4 << 20 };
+        // No redirects: HttpHosts is checked on the URL the page asked for, and a redirect would lead past it.
+        var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(10), MaxResponseContentBufferSize = 4 << 20 };
         client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36");
         return client;
     }
@@ -528,30 +529,37 @@ sealed class MainForm : Form
     /**
      * Page → native `{cmd: 'http', id, url, form?}` (native.js `nativeHttp`): GET, or POST `form` as
      * application/x-www-form-urlencoded, to an https host in HttpHosts, so the page is no general
-     * proxy. Answers `{http: id, status, body}` or `{http: id, error}`. Awaited on the UI thread, so
-     * the answer is posted from it.
+     * proxy. Answers `{http: id, status, body}` or `{http: id, error: host | timeout | network}` --
+     * an error kind, never a sentence, like the readings. Awaited on the UI thread, so the answer is
+     * posted from it.
      */
     async void Fetch(JsonObject body)
     {
-        var id = body["id"]?.DeepClone();
-        var answer = new JsonObject { ["http"] = id };
+        var answer = new JsonObject { ["http"] = body["id"]?.DeepClone() };
+        var target = body["url"]?.ToString();
         try
         {
-            if (!Uri.TryCreate((string?)body["url"], UriKind.Absolute, out var url) || url.Scheme != "https" || !HttpHosts.Contains(url.Host))
-                throw new InvalidOperationException($"host not allowed: {(string?)body["url"]}");
-            using var request = new HttpRequestMessage(body["form"] is JsonObject ? HttpMethod.Post : HttpMethod.Get, url);
-            if (body["form"] is JsonObject form)
-                request.Content = new FormUrlEncodedContent(form.Select(kv => KeyValuePair.Create(kv.Key, kv.Value?.ToString() ?? "")));
-            request.Headers.Referrer = new Uri($"https://{url.Host}/");
-            using var response = await http.SendAsync(request);
-            answer["status"] = (int)response.StatusCode;
-            answer["body"] = await response.Content.ReadAsStringAsync();
-            Program.Log($"http {request.Method} {url} {(int)response.StatusCode}");
+            if (!Uri.TryCreate(target, UriKind.Absolute, out var url) || url.Scheme != "https" || !HttpHosts.Contains(url.Host))
+            {
+                answer["error"] = "host";
+                Program.Log($"http {target} refused: host not allowed");
+            }
+            else
+            {
+                using var request = new HttpRequestMessage(body["form"] is JsonObject ? HttpMethod.Post : HttpMethod.Get, url);
+                if (body["form"] is JsonObject form)
+                    request.Content = new FormUrlEncodedContent(form.Select(kv => KeyValuePair.Create(kv.Key, kv.Value?.ToString() ?? "")));
+                request.Headers.Referrer = new Uri($"https://{url.Host}/");
+                using var response = await http.SendAsync(request);
+                answer["status"] = (int)response.StatusCode;
+                answer["body"] = await response.Content.ReadAsStringAsync();
+                Program.Log($"http {request.Method} {url} {(int)response.StatusCode}");
+            }
         }
         catch (Exception e)
         {
-            answer["error"] = e.Message;
-            Program.Log($"http {(string?)body["url"]} failed: {e.Message}");
+            answer["error"] = e is TaskCanceledException ? "timeout" : "network";
+            Program.Log($"http {target} failed: {e.Message}");
         }
         web.CoreWebView2?.PostWebMessageAsJson(answer.ToJsonString());
     }

@@ -54,6 +54,7 @@ export async function fetchLyrics(track, signal, only = null) {
     let fallback = null, firstErr = null, failed = 0;
     for (const run of runs) {
         const r = await Promise.race([run, late]);
+        signal?.throwIfAborted();                   // NetEase does not watch the signal; its answer is stale too
         if (!r) continue;                           // still pending past the deadline: a lower source has it
         if (r.err) { failed++; firstErr ??= r.err; continue; }
         if (r.rec?.synced) { clearTimeout(deadline); return r.rec; }
@@ -146,19 +147,26 @@ function splitArtists(s) {
     return (s ?? '').split(ARTIST_SEPARATOR).map(fold).filter(Boolean);
 }
 
-/** A version the player's title does not name: a cover, karaoke or live take of the same song. */
-const VERSION_WORDS = /翻唱|翻自|伴奏|カラオケ|歌ってみた|\b(?:cover|covered|karaoke|live|remix|inst|instrumental|off vocal)\b/gi;
+/**
+ * Words that name a different recording of the same song: a cover, karaoke, live take, remix or
+ * re-recording ("(Taylor's Version)", "(2023 Ver.)"). baseTitle() drops the brackets they sit in,
+ * so they are compared on their own.
+ */
+const VERSION_WORDS = /翻唱|翻自|伴奏|カラオケ|歌ってみた|\b(?:cover|covered|karaoke|live|remix|inst|instrumental|off vocal|version|ver)\b/gi;
+
+function versionWords(title) {
+    return [...new Set((title.match(VERSION_WORDS) ?? []).map((w) => w.toLowerCase()))].sort().join(' ');
+}
 
 /**
  * Whether a catalogue hit is the playing track: same length (when the hit has one), same base
- * title, an artist in common, and no version word the player's title lacks. The artist check is
- * what keeps covers out -- lrc.red answers 米津玄師「Lemon」 with 花僮's and 洛天依's covers.
+ * title, the same version words, and an artist in common. The artist check is what keeps covers
+ * out -- lrc.red answers 米津玄師「Lemon」 with 花僮's and 洛天依's covers.
  */
 function matches(track, { title, artist, durationS }) {
     if (durationS && Math.abs(durationS - track.durationMs / 1000) > DURATION_TOLERANCE_S) return false;
     if (baseTitle(title) !== baseTitle(track.title)) return false;
-    const own = track.title.toLowerCase();
-    if ((title.match(VERSION_WORDS) ?? []).some((w) => !own.includes(w.toLowerCase()))) return false;
+    if (versionWords(title) !== versionWords(track.title)) return false;
     const mine = splitArtists(track.artist), theirs = splitArtists(artist);
     return mine.some((a) => theirs.some((b) => a === b || (Math.min(a.length, b.length) >= 2 && (a.includes(b) || b.includes(a)))));
 }
@@ -285,7 +293,7 @@ function ttmlToRecord(xml) {
         const text = line.textContent.replace(/\s+/g, ' ').trim();
         if (!text) continue;
         texts.push(text);
-        const spans = p.getElementsByTagNameNS('*', 'span');
+        const spans = line.getElementsByTagNameNS('*', 'span');      // without the background vocals
         const t = ttmlTime(p.getAttribute('begin') ?? spans[0]?.getAttribute('begin'));
         const end = ttmlTime(p.getAttribute('end') ?? spans[spans.length - 1]?.getAttribute('end'));
         if (Number.isNaN(t)) continue;
@@ -302,7 +310,7 @@ const NETEASE = 'https://music.163.com/api';
 
 /** NetEase sends no CORS headers; the Windows host fetches it (`music.163.com` only). */
 async function netease(path, form) {
-    const res = await nativeHttp(`${NETEASE}${path}`, form);
+    const res = await nativeHttp(`${NETEASE}${path}`, form).catch((err) => { throw new Error(`NetEase ${err.message}`); });
     if (res.status !== 200) throw new Error(`NetEase ${res.status}`);
     return JSON.parse(res.body);
 }
@@ -315,7 +323,8 @@ async function fetchNetease(track) {
     const lyr = await netease(`/song/lyric?id=${hit.id}&lv=1`);
     const lrc = dropCredits(lyr.lrc?.lyric ?? '');
     if (lyr.nolyric || lyr.pureMusic || /纯音乐，请欣赏/.test(lrc)) return { synced: null, plain: null, instrumental: true };
-    const timed = lrc.split('\n').filter((l) => /^\[\d+:\d+(?:[.:]\d+)?\]\s*\S/.test(l) && !/^\[00:00[.:]00?0?\]/.test(l));
+    // Synced when sung rows carry real times; unsynced NetEase text is all at [00:00.00].
+    const timed = lrc.split('\n').filter((l) => LRC_ROW.exec(l)?.[2].trim() && !/^\[00:00[.:]00?0?\]/.test(l));
     if (timed.length >= 3) return { synced: lrc, plain: null, instrumental: false };
     const plain = lrc.replace(/^(?:\[[^\]]*\])+/gm, '').trim();
     return plain ? { synced: null, plain, instrumental: false } : null;
@@ -329,7 +338,7 @@ async function fetchNetease(track) {
 function dropCredits(lrc) {
     let sung = false;
     return lrc.replace(/\r/g, '').split('\n').filter((raw) => {
-        const m = raw.match(/^((?:\[\d+:\d+(?:[.:]\d+)?\])+)(.*)$/);
+        const m = raw.match(LRC_ROW);
         const text = m?.[2].trim();
         if (!text || sung) return true;
         if (/^[^:：]{1,12}[:：]/.test(text)) return false;
@@ -337,6 +346,9 @@ function dropCredits(lrc) {
         return true;
     }).join('\n');
 }
+
+/** An LRC row: one or more `[mm:ss.xx]` tags (group 1), then the text (group 2). */
+const LRC_ROW = /^((?:\[\d+:\d+(?:[.:]\d+)?\])+)(.*)$/;
 
 /** A silent stretch at least this long becomes a JIZURA [間奏] cut (graphics, no lyric). */
 const INTERLUDE_MIN_S = 6;
@@ -354,7 +366,7 @@ const INTERLUDE_MIN_S = 6;
 export function lrcToJizura(lrc) {
     const rows = [];
     for (const raw of lrc.replace(/\r/g, '').split('\n')) {
-        const m = raw.match(/^((?:\[\d+:\d+(?:[.:]\d+)?\])+)(.*)$/);
+        const m = raw.match(LRC_ROW);
         if (!m) continue;                                   // [ar:] / [ti:] headers and junk
         const times = [...m[1].matchAll(/\[(\d+):(\d+(?:[.:]\d+)?)\]/g)].map((t) => +t[1] * 60 + parseFloat(t[2].replace(':', '.')));
         const text = escapeMarkup(unifyRadicals(m[2].trim()));

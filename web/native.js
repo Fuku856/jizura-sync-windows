@@ -20,7 +20,8 @@ let httpListening = false;
 /**
  * GET (or POST `form` as application/x-www-form-urlencoded) through the Windows host, for lyric
  * catalogues that send no CORS headers. The host allows only the hosts it lists (Program.cs
- * `HttpHosts`). Resolves with `{status, body}`; rejects on a network failure or a refused host.
+ * `HttpHosts`). Resolves with `{status, body}`; rejects with an error kind as the message: `host`
+ * (refused), `timeout` or `network`.
  */
 export function nativeHttp(url, form = null) {
     if (!httpListening) {
@@ -36,7 +37,7 @@ export function nativeHttp(url, form = null) {
     }
     const id = ++httpId;
     return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => { httpWaiting.delete(id); reject(new Error('timed out')); }, HTTP_TIMEOUT_MS);
+        const timer = setTimeout(() => { httpWaiting.delete(id); reject(new Error('timeout')); }, HTTP_TIMEOUT_MS);
         httpWaiting.set(id, { resolve, reject, timer });
         webview().postMessage({ cmd: 'http', id, url, form });
     });

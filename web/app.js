@@ -70,6 +70,7 @@ let look = null;             // JIZURA random look (omakase) applied on top of t
 let plan = null;
 let planAspect = null;       // JIZURA aspect key ('16:9' …) the plan was built for
 let loadToken = 0;
+let lookup = null;           // AbortController of the lyric lookup running for the current track
 let offsetMs = Number(read(OFFSET_KEY)) || 0;
 let komaPref = read(KOMA_KEY) === null ? null : Number(read(KOMA_KEY));
 let unifyPref = read(UNIFY_KEY) !== '0';
@@ -125,6 +126,9 @@ function buildPlan() {
 
 async function loadTrack(state) {
     const token = ++loadToken;
+    // Stop the previous song's lookup: four sources, LRCLIB's retries and waits, all for nothing now.
+    lookup?.abort();
+    lookup = new AbortController();
     pace.upWait = UP_WAIT_MS;        // another song may not have the cuts that held the level down
     trackId = state.trackId;
     $('track').textContent = `${state.title} — ${state.artist}`;
@@ -136,7 +140,7 @@ async function loadTrack(state) {
     setStatus(t('Looking up lyrics…'));
     let lyr = null;
     try {
-        lyr = await fetchLyrics({ artist: state.artist, title: state.title, album: state.album, durationMs: state.durationMs }, undefined, LYRICS_SOURCE);
+        lyr = await fetchLyrics({ artist: state.artist, title: state.title, album: state.album, durationMs: state.durationMs }, lookup.signal, LYRICS_SOURCE);
     } catch (err) {
         if (token !== loadToken) return;
         console.warn('lyrics', err);
@@ -163,6 +167,7 @@ async function loadTrack(state) {
  */
 function loadStream(state) {
     ++loadToken;                    // a lookup still running for the previous song is dropped
+    lookup?.abort();
     trackId = state.trackId;
     song = null; plan = null;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
