@@ -2,13 +2,13 @@
 
 Windows で再生中の曲を、リアルタイムに歌詞モーションにするアプリ。
 
-この PC で再生中の曲を Windows のメディア操作（音量フライアウトに出るもの）から追い、同期歌詞を [LRCLIB](https://lrclib.net) から取って、[JIZURA](https://github.com/852wa/JIZURA) で描く。JIZURA は、数百の小さな部品（レイアウト・動き・装飾）を組み合わせて文字PVを組み立てるエンジン。Spotify、Apple Music、ブラウザのタブ（YouTube など）、そのほか Windows のメディア操作に出るプレイヤーなら何でも追える。
+この PC で再生中の曲を Windows のメディア操作（音量フライアウトに出るもの）から追い、同期歌詞を [LRCLIB](https://lrclib.net)・[プチリリ](https://petitlyrics.com)・[lrc.red](https://lrc.red)・NetEase（網易雲音楽）から取って、[JIZURA](https://github.com/852wa/JIZURA) で描く。JIZURA は、数百の小さな部品（レイアウト・動き・装飾）を組み合わせて文字PVを組み立てるエンジン。Spotify、Apple Music、ブラウザのタブ（YouTube など）、そのほか Windows のメディア操作に出るプレイヤーなら何でも追える。
 
 見た目は曲ごとに自動で選ばれる。ウィンドウで `R` キーを押すと、別の見た目に変わる。
 
 > **これは [Saqoosha/jizura-sync](https://github.com/Saqoosha/jizura-sync)（macOS アプリ）の非公式フォーク**で、Windows 版を追加したもの。本家の作者とは関係がなく、本家に Windows 版の問い合わせをしないこと。macOS 版は [本家](https://github.com/Saqoosha/jizura-sync) を使う。
 >
-> **個人のプロジェクトで、サービスではない**。歌詞は LRCLIB から取っていて、許諾を得ていない。これで作ったものを共有する前に、[免責事項](#免責事項)を読むこと。
+> **個人のプロジェクトで、サービスではない**。歌詞は LRCLIB などの非公式な経路で取っていて、許諾を得ていない。これで作ったものを共有する前に、[免責事項](#免責事項)を読むこと。
 
 [English](README.en.md)
 
@@ -68,7 +68,7 @@ powershell -ExecutionPolicy Bypass -File tools/build-win.ps1
 - 見えているウィンドウで曲を再生している間は、ディスプレイをスリープさせない
 - Windows の表示言語が日本語なら、日本語で表示する
 
-画面下のバーに、ジャケット・曲名と、再生 / 一時停止・前へ / 次へ・シークがある。`?` キーかバーの `?` ボタンで、次の操作一覧が開く。
+画面下のバーに、ジャケット・曲名・歌詞の取得元（「歌詞: プチリリ」など）と、再生 / 一時停止・前へ / 次へ・シークがある。`?` キーかバーの `?` ボタンで、次の操作一覧が開く。
 
 | キー | |
 |---|---|
@@ -83,7 +83,7 @@ powershell -ExecutionPolicy Bypass -File tools/build-win.ps1
 
 ## 制限
 
-- 歌詞の質は LRCLIB のデータ次第。歌詞が無い曲、同期していない歌詞しか無い曲、長さが 4 秒以上ずれた歌詞しか無い曲は、タイトルだけの画面になり、理由を表示する
+- 歌詞の質は各ソースのデータ次第。どのソースにも歌詞が無い曲、同期していない歌詞しか無い曲、長さが 4 秒以上ずれた歌詞しか無い曲は、タイトルだけの画面になり、理由を表示する
 - 曲の長さを出さないもの（ライブ配信、再生位置を出さないページ、長さを出さないプレイヤー）は「曲の中の位置がない」と表示し、歌詞は出ない
 - ブラウザのタブは、ページが曲名・アーティスト・再生位置を Windows に渡している場合だけ正しく追える。一時停止中の位置は、ページが最後に報告したものになる
 - 拍への同期は無い。JIZURA は音声から拍を検出してカットを合わせられるが、jizura-sync はプレイヤーの音声を読めない
@@ -93,9 +93,9 @@ powershell -ExecutionPolicy Bypass -File tools/build-win.ps1
 
 ## 免責事項
 
-このプロジェクトは個人の実験。Spotify・Apple・Microsoft・LRCLIB・JIZURA の作者・本家 jizura-sync の作者とは関係がなく、承認も支援も受けていない。無保証で提供する（[LICENSE](LICENSE) を参照）。どう使うかは、動かす人の責任。
+このプロジェクトは個人の実験。Spotify・Apple・Microsoft・LRCLIB・プチリリ・lrc.red・NetEase・JIZURA の作者・本家 jizura-sync の作者とは関係がなく、承認も支援も受けていない。無保証で提供する（[LICENSE](LICENSE) を参照）。どう使うかは、動かす人の責任。
 
-- **歌詞は許諾を得ていない**。歌詞は作詞者と音楽出版社の著作物。LRCLIB の歌詞は利用者が投稿したもので、LRCLIB もこのプロジェクトも権利者の許諾を得ていない。このプロジェクトは歌詞の権利を一切持たない。歌詞は実行時に取得するだけで、保存も再配布もしない
+- **歌詞は許諾を得ていない**。歌詞は作詞者と音楽出版社の著作物。LRCLIB の歌詞は利用者が投稿したもので、LRCLIB もこのプロジェクトも権利者の許諾を得ていない。プチリリ・lrc.red・NetEase は公開 API ではない口を使っていて（プチリリは同社の Android SDK のアプリ ID を借りている）、各サービスの利用規約に反しうる。このプロジェクトは歌詞の権利を一切持たない。歌詞は実行時に取得するだけで、保存も再配布もしない
 - **音楽サービスの API は使わない**。同じ PC で再生中の曲の情報を、Windows のメディアセッションから読むだけ。ただし、それで何かの許諾が得られるわけではない。音源の権利は変わらず各サービスと権利者の側にある
 
 ## 開発者向け
@@ -116,7 +116,7 @@ powershell -ExecutionPolicy Bypass -File tools/build-win.ps1
 ### 仕組み
 
 - **再生状態**: Windows の Global System Media Transport Controls（音量フライアウトと同じセッション）から、曲名・アーティスト・ジャケット・再生位置・再生状態を読む。曲・再生状態・再生位置が変わったという通知のたびにすぐ読み、再生中は 1 秒ごとにも読む。一時停止中や再生なしのときは通知を待つだけ。セッションは別プロセスのものなので、各呼び出しに 2 秒のタイムアウトを付けている
-- **歌詞**: LRCLIB の同期歌詞（LRC）を、アーティスト・曲名・長さで引く。LRCLIB が一時的に落ちているときは 2 回まで再試行する。LRC は JIZURA の歌詞記法にほぼそのまま渡せるので、変換で行うのは JIZURA の記号のエスケープと、セクションの区切りだけ
+- **歌詞**: LRCLIB → プチリリ → lrc.red → NetEase の順に優先し、4 つに同時に問い合わせて、タイミング付きの歌詞を最初に持っているソースを使う。どれもアーティスト・曲名・長さが合う候補だけを採る（カバー版を拾わないため）。プチリリは邦楽に強く、単語単位のタイミングを持つ。NetEase は CORS ヘッダを返さないので Windows アプリだけが使う（ホストが代わりに取得する）。LRCLIB が一時的に落ちているときは 2 回まで再試行するが、下位のソースがすでに歌詞を持っていれば 3 秒で見切る。どのソースの歌詞も LRC にそろえてから JIZURA に渡すので、変換で行うのは JIZURA の記号のエスケープと、セクションの区切りだけ
 - **描画**: ウィンドウは WinForms + WebView2 で、中身は `web/` のページ。ページは `https://app.jizura-sync.test/` の仮想ホストで配信する（この origin がページの localStorage を持つので変えないこと）。JIZURA は曲全体の plan を 1 回だけ作り、レンダラは時刻の純関数なので、毎フレーム現在の再生位置の瞬間を描くだけで同期する
 
 コードと設計の詳しいメモは [AGENTS.md](AGENTS.md) にある。
@@ -164,4 +164,4 @@ tools/update-jizura-scripts.sh      # web/index.html の <script> タグを作�
 
 ## ライセンス
 
-MIT（[LICENSE](LICENSE)、© Saqoosha, Fuku856）。JIZURA は © 852wa の MIT ライセンスで、submodule として含めている（`web/vendor/JIZURA/LICENSE` と `THIRD_PARTY_NOTICES.md`）。WebView2 SDK は Microsoft のライセンスで、ビルド時に NuGet から取得する。歌詞は実行時に LRCLIB から取得するもので、このリポジトリには含まれない。
+MIT（[LICENSE](LICENSE)、© Saqoosha, Fuku856）。JIZURA は © 852wa の MIT ライセンスで、submodule として含めている（`web/vendor/JIZURA/LICENSE` と `THIRD_PARTY_NOTICES.md`）。WebView2 SDK は Microsoft のライセンスで、ビルド時に NuGet から取得する。歌詞は実行時に各ソースから取得するもので、このリポジトリには含まれない。

@@ -46,6 +46,8 @@ const ASPECTS = ['16:9', '9:16', '4:3', '3:4', '1:1', '4:5', '21:9'];
 // A song with no lyrics (yet) is a title card over one interlude cut. `[間奏]` is JIZURA's own
 // lyric syntax for an instrumental break.
 const NO_LYRICS = '[00:00.50][間奏]';
+// `?lyrics=lrclib|petit|lrcred|netease` asks that lyric source alone (lyrics.js SOURCES), for testing.
+const LYRICS_SOURCE = new URLSearchParams(location.search).get('lyrics');
 
 const OFFSET_KEY = 'jizura-sync.offsetMs';
 const OFFSET_STEP_MS = 50;
@@ -63,11 +65,12 @@ const BAR_KEY = 'jizura-sync.barHidden';
 let player = null;
 let trackId = null;          // track the current plan belongs to
 let artUrl = null;           // cover the bar shows
-let song = null;             // { title, artist, durationMs, lyrics } for the current track
+let song = null;             // { title, artist, durationMs, lyrics, source } for the current track
 let look = null;             // JIZURA random look (omakase) applied on top of the default project
 let plan = null;
 let planAspect = null;       // JIZURA aspect key ('16:9' …) the plan was built for
 let loadToken = 0;
+let lookup = null;           // AbortController of the lyric lookup running for the current track
 let offsetMs = Number(read(OFFSET_KEY)) || 0;
 let komaPref = read(KOMA_KEY) === null ? null : Number(read(KOMA_KEY));
 let unifyPref = read(UNIFY_KEY) !== '0';
@@ -116,11 +119,16 @@ function buildPlan() {
     pace.settleUntil = performance.now() + SETTLE_MS;
     sizeCanvas();
     J.ensureFonts(song.lyrics + song.title + song.artist + HUD_CHARS, J.fontsOfPlan(plan)).catch(() => {});
-    setStatus(`${J.STYLES[project.style]?.name ?? project.style} · ${J.MOODS[project.mood]?.name ?? ''} · ${t('{n} cuts', { n: plan.cuts.length })}${project.unify ? ` · ${t('same style per section')}` : ''}`);
+    // The lyric source leads: the line is cut with an ellipsis when the window is narrow.
+    const source = song.source ? `${t('Lyrics: {source}', { source: t(song.source) })} · ` : '';
+    setStatus(`${source}${J.STYLES[project.style]?.name ?? project.style} · ${J.MOODS[project.mood]?.name ?? ''} · ${t('{n} cuts', { n: plan.cuts.length })}${project.unify ? ` · ${t('same style per section')}` : ''}`);
 }
 
 async function loadTrack(state) {
     const token = ++loadToken;
+    // Stop the previous song's lookup: four sources, LRCLIB's retries and waits, all for nothing now.
+    lookup?.abort();
+    lookup = new AbortController();
     pace.upWait = UP_WAIT_MS;        // another song may not have the cuts that held the level down
     trackId = state.trackId;
     $('track').textContent = `${state.title} — ${state.artist}`;
@@ -132,7 +140,7 @@ async function loadTrack(state) {
     setStatus(t('Looking up lyrics…'));
     let lyr = null;
     try {
-        lyr = await fetchLyrics({ artist: state.artist, title: state.title, album: state.album, durationMs: state.durationMs });
+        lyr = await fetchLyrics({ artist: state.artist, title: state.title, album: state.album, durationMs: state.durationMs }, lookup.signal, LYRICS_SOURCE);
     } catch (err) {
         if (token !== loadToken) return;
         console.warn('lyrics', err);
@@ -148,9 +156,9 @@ async function loadTrack(state) {
         return;
     }
     const { lyrics, lines, parts } = lrcToJizura(lyr.synced);
-    song = Object.assign({}, song, { lyrics });
+    song = Object.assign({}, song, { lyrics, source: lyr.source });
     buildPlan();
-    console.info(`[jizura-sync] ${state.title}: ${lines} lines in ${parts} parts`);
+    console.info(`[jizura-sync] ${state.title}: ${lines} lines in ${parts} parts (${lyr.source})`);
 }
 
 /**
@@ -159,6 +167,7 @@ async function loadTrack(state) {
  */
 function loadStream(state) {
     ++loadToken;                    // a lookup still running for the previous song is dropped
+    lookup?.abort();
     trackId = state.trackId;
     song = null; plan = null;
     ctx.clearRect(0, 0, canvas.width, canvas.height);

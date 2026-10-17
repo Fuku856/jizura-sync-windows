@@ -36,6 +36,8 @@ const JA = {
     'No synced lyrics for this track': 'この曲にはタイミング付きの歌詞がありません',
     'No lyrics: a stream has no song position to time them to': '歌詞なし: ストリームには曲の中の再生位置がないため、タイミングを合わせられません',
     'No lyrics found for this track': 'この曲の歌詞が見つかりません',
+    'Lyrics: {source}': '歌詞: {source}',
+    'PetitLyrics': 'プチリリ',
     '{n} cuts': '{n} カット',
     'same style per section': 'セクションごとに同じスタイル',
     'Lyrics timing reset': '歌詞のタイミングをリセットしました',
