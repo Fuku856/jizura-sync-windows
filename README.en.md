@@ -64,7 +64,7 @@ The bar at the bottom shows the cover art, the track, the lyric source and playb
 
 1. Download `jizura-sync-<version>-win-x64.zip` from [Releases](https://github.com/Fuku856/jizura-sync-windows/releases).
 2. Extract it anywhere and run `jizura-sync.exe` (keep `WebView2Loader.dll` and the `web` folder next to the exe).
-3. Play a song in Spotify, Apple Music or a browser.
+3. Play a song in any player (a browser tab works too).
 
 The app is not code-signed, so SmartScreen may warn the first time; choose "More info" → "Run anyway".
 
@@ -105,6 +105,8 @@ Run `build\win\jizura-sync.exe` with these set:
 | `JIZURA_WEB_ROOT=<repo>\web` | Serve the page from the checkout's `web/`. Edit, then `F5` to reload |
 | `JIZURA_QUERY=mock=Artist\|Title\|durationMs&t=30` | Play a fixed song on a local clock with no player |
 | `JIZURA_LOG=<file>` | Log readings and session events |
+
+For the page alone, start `./serve.sh` and open <http://127.0.0.1:5180/?mock> in a browser (needs bash and Python).
 
 ### Releases
 

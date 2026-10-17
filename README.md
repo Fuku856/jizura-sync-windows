@@ -64,7 +64,7 @@ Windows で再生中の曲の歌詞を、リアルタイムで歌詞モーショ
 
 1. [Releases](https://github.com/Fuku856/jizura-sync-windows/releases) から `jizura-sync-<バージョン>-win-x64.zip` をダウンロードする
 2. 好きな場所に展開し、`jizura-sync.exe` を起動する（`WebView2Loader.dll` と `web` フォルダは exe の隣に置いたままにする）
-3. Spotify や Apple Music、ブラウザで曲を再生する
+3. 好きなプレイヤー（ブラウザのタブも可）で曲を再生する
 
 コード署名をしていないので、初回は SmartScreen の警告が出ることがある。その場合は「詳細情報」→「実行」で起動する。
 
@@ -105,6 +105,8 @@ powershell -ExecutionPolicy Bypass -File tools/build-win.ps1
 | `JIZURA_WEB_ROOT=<リポジトリ>\web` | チェックアウトの `web/` を読む。編集して `F5` で再読み込み |
 | `JIZURA_QUERY=mock=Artist\|Title\|durationMs&t=30` | プレイヤーなしで、固定の曲をページ内の時計で再生する |
 | `JIZURA_LOG=<ファイル>` | 読み取りとセッションのイベントを記録する |
+
+ページだけなら、`./serve.sh` で起動して <http://127.0.0.1:5180/?mock> をブラウザで開いても確かめられる（bash と Python が要る）。
 
 ### リリース
 
