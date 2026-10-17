@@ -5,9 +5,10 @@
 #   the same commit; it fails if the tag is not on the branch its kind calls for.
 # - The tag is the version: v1.2.3 or v1.2.3-beta.1 (the exe's file version drops the suffix).
 # - GitHub runs this file as it is in the tagged commit, so the branch you tag must already have it.
-# - The release body is always overwritten: GitHub's generated notes (PRs since the previous
-#   release), headed by a summary for users from Claude when the CLAUDE_CODE_OAUTH_TOKEN secret is
-#   set (`claude setup-token`). Without it, or if Claude fails, the body is the generated notes only.
+# - Once the build has succeeded, the release body is always overwritten: GitHub's generated notes
+#   (PRs since the previous release), headed by a summary for users from Claude when the
+#   CLAUDE_CODE_OAUTH_TOKEN secret is set (`claude setup-token`). Without it, or if Claude fails, the
+#   body is the generated notes only. A failed build (a tag on the wrong branch) leaves the body as is.
 name: Release (Windows)
 
 on:
@@ -23,6 +24,7 @@ concurrency:
 
 jobs:
   release-notes:
+    needs: build # a release that is to be deleted and made again keeps its body
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}

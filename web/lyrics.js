@@ -43,32 +43,41 @@ const REQUEST_TIMEOUT_MS = 10000;
 export async function fetchLyrics(track, signal, only = null) {
     const sources = SOURCES.filter((s) => (!only || s.key === only) && (!s.native || hasNative()));
     if (!sources.length) throw new Error(`no lyrics source "${only}" here`);
+    // Once there is an answer, the sources still running are stopped: LRCLIB's retries and
+    // Retry-After waits would otherwise go on until the next track, using up its rate limit.
+    const done = new AbortController();
+    const inner = signal ? AbortSignal.any([signal, done.signal]) : done.signal;
     let deadline = null, passDeadline;
     const late = new Promise((resolve) => { passDeadline = resolve; });
-    const runs = sources.map((s) => s.fetch(track, signal).then(
+    const runs = sources.map((s) => s.fetch(track, inner).then(
         (rec) => {
             if (rec?.synced && !deadline) deadline = setTimeout(passDeadline, HIGHER_WAIT_MS);
             return { rec: rec && { ...rec, source: s.name } };
         },
-        (err) => { if (!signal?.aborted) console.warn(`[jizura-sync] ${s.name}:`, err); return { err }; }));
-    let fallback = null, firstErr = null, failed = 0;
-    for (const run of runs) {
-        const r = await Promise.race([run, late]);
-        signal?.throwIfAborted();                   // NetEase does not watch the signal; its answer is stale too
-        if (!r) continue;                           // still pending past the deadline: a lower source has it
-        if (r.err) { failed++; firstErr ??= r.err; continue; }
-        if (r.rec?.synced) { clearTimeout(deadline); return r.rec; }
-        fallback ??= r.rec;
+        (err) => { if (!inner.aborted) console.warn(`[jizura-sync] ${s.name}:`, err); return { err }; }));
+    try {
+        let fallback = null, firstErr = null, failed = 0;
+        for (const run of runs) {
+            const r = await Promise.race([run, late]);
+            signal?.throwIfAborted();
+            if (!r) continue;                       // still pending past the deadline: a lower source has it
+            if (r.err) { failed++; firstErr ??= r.err; continue; }
+            if (r.rec?.synced) return r.rec;
+            fallback ??= r.rec;
+        }
+        if (!fallback && failed === runs.length) throw firstErr;
+        return fallback;
+    } finally {
+        clearTimeout(deadline);
+        done.abort();
     }
-    if (!fallback && failed === runs.length) throw firstErr;
-    return fallback;
 }
 
 async function fetchLrclib(track, signal) {
     const durationS = Math.round(track.durationMs / 1000);
-    // Spotify joins multiple artists with ", "; LRCLIB indexes the credited artist string,
-    // which is usually the first one alone.
-    const artists = [...new Set([track.artist, track.artist.split(', ')[0]])];
+    // Spotify joins multiple artists with ", " (others with "&", "feat." …); LRCLIB indexes the
+    // credited artist string, which is usually the first one alone.
+    const artists = [...new Set([track.artist, firstArtist(track.artist)])];
     for (const artist of artists) {
         const params = new URLSearchParams({ artist_name: artist, track_name: track.title, duration: String(durationS) });
         if (track.album) params.set('album_name', track.album);
@@ -137,6 +146,7 @@ function fold(s) {
 
 /** The title without a trailing "(…)", "[…]", "【…】" or " - …" (versions, tie-ins, remasters). */
 function baseTitle(s) {
+    s ??= '';
     return fold(s.replace(/\s*[(（[［【〔].*$/, '').replace(/\s+[-–—]\s+.*$/, '')) || fold(s);
 }
 
@@ -155,7 +165,7 @@ function splitArtists(s) {
 const VERSION_WORDS = /翻唱|翻自|伴奏|カラオケ|歌ってみた|\b(?:cover|covered|karaoke|live|remix|inst|instrumental|off vocal|version|ver)\b/gi;
 
 function versionWords(title) {
-    return [...new Set((title.match(VERSION_WORDS) ?? []).map((w) => w.toLowerCase()))].sort().join(' ');
+    return [...new Set(((title ?? '').match(VERSION_WORDS) ?? []).map((w) => w.toLowerCase()))].sort().join(' ');
 }
 
 /**
@@ -230,7 +240,8 @@ async function fetchPetit(track, signal) {
     const rec = hit.data ? hit : (await petit({ key_lyricsId: hit.id }, signal))[0];
     if (!rec?.data) return null;
     const text = base64Utf8(rec.data);
-    if (rec.type === '3' || text.startsWith('<wsy')) return { synced: wsyToLrc(text), plain: null, instrumental: false };
+    // Word or line timing is `<wsy>` XML, which may follow a BOM or an XML declaration.
+    if (rec.type === '3' || /^\uFEFF?\s*(?:<\?xml[^>]*\?>\s*)?<wsy[\s>]/.test(text)) return { synced: wsyToLrc(text), plain: null, instrumental: false };
     return { synced: null, plain: text, instrumental: false };
 }
 
@@ -309,18 +320,18 @@ function ttmlToRecord(xml) {
 const NETEASE = 'https://music.163.com/api';
 
 /** NetEase sends no CORS headers; the Windows host fetches it (`music.163.com` only). */
-async function netease(path, form) {
-    const res = await nativeHttp(`${NETEASE}${path}`, form).catch((err) => { throw new Error(`NetEase ${err.message}`); });
+async function netease(path, form, signal) {
+    const res = await nativeHttp(`${NETEASE}${path}`, form, signal).catch((err) => { throw new Error(`NetEase ${err.message}`); });
     if (res.status !== 200) throw new Error(`NetEase ${res.status}`);
     return JSON.parse(res.body);
 }
 
-async function fetchNetease(track) {
-    const found = await netease('/cloudsearch/pc', { s: `${track.title} ${firstArtist(track.artist)}`, type: '1', limit: '10', offset: '0' });
+async function fetchNetease(track, signal) {
+    const found = await netease('/cloudsearch/pc', { s: `${track.title} ${firstArtist(track.artist)}`, type: '1', limit: '10', offset: '0' }, signal);
     const hit = (found.result?.songs ?? []).find((s) =>
         matches(track, { title: s.name, artist: (s.ar ?? []).map((a) => a.name).join(', '), durationS: s.dt / 1000 }));
     if (!hit) return null;
-    const lyr = await netease(`/song/lyric?id=${hit.id}&lv=1`);
+    const lyr = await netease(`/song/lyric?id=${hit.id}&lv=1`, null, signal);
     const lrc = dropCredits(lyr.lrc?.lyric ?? '');
     if (lyr.nolyric || lyr.pureMusic || /纯音乐，请欣赏/.test(lrc)) return { synced: null, plain: null, instrumental: true };
     // Synced when sung rows carry real times; unsynced NetEase text is all at [00:00.00].
@@ -332,8 +343,9 @@ async function fetchNetease(track) {
 
 /**
  * NetEase opens with credit rows timed like lyrics: "[00:00.000] 作词 : 米津玄師", 作曲, 编曲,
- * 制作人 … Rows of the form "name : value" before the first sung row are dropped; a colon later
- * in the song is lyrics.
+ * 制作人, "Mixing Engineer : …" … Rows of the form "name : value" before the first sung row are
+ * dropped -- a name of up to 24 characters with no comma or sentence mark, so "Baby, listen: …"
+ * stays; a colon later in the song is lyrics.
  */
 function dropCredits(lrc) {
     let sung = false;
@@ -341,7 +353,7 @@ function dropCredits(lrc) {
         const m = raw.match(LRC_ROW);
         const text = m?.[2].trim();
         if (!text || sung) return true;
-        if (/^[^:：]{1,12}[:：]/.test(text)) return false;
+        if (/^[^:：,，.。!?！？]{1,24}[:：]/.test(text)) return false;
         sung = true;
         return true;
     }).join('\n');
