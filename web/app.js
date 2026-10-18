@@ -61,6 +61,7 @@ const UNIFY_KEY = 'jizura-sync.unify';
 // The now-playing bar hides once the pointer rests, unless it is pinned; the pin sticks.
 const PIN_KEY = 'jizura-sync.barPinned';
 const IDLE_MS = 3000;
+const FLASH_MS = 3000;        // a control's feedback in the status line, before it says what it said again
 
 let player = null;
 let trackId = null;          // track the current plan belongs to
@@ -315,7 +316,18 @@ function showNotice(text) {
     $('notice').hidden = false;
 }
 
-function setStatus(text) { $('status').textContent = text; }
+// The status line says what the song is drawn with (or what went wrong); a control's feedback
+// (flashStatus) takes it over for FLASH_MS, then the line goes back to the latest setStatus.
+let baseStatus = '', flashTimer = 0;
+function setStatus(text) {
+    baseStatus = text;
+    if (!flashTimer) $('status').textContent = text;
+}
+function flashStatus(text) {
+    $('status').textContent = text;
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => { flashTimer = 0; $('status').textContent = baseStatus; }, FLASH_MS);
+}
 function togglePlay() { if (player) (player.isPlaying() ? player.pause() : player.play()); }
 
 // Errors also reach a user while the bar is hidden: a toast outside it, once per distinct message
@@ -334,19 +346,19 @@ function showError(text) {
 function setOffset(ms) {
     offsetMs = ms;
     write(OFFSET_KEY, String(ms));
-    setStatus(ms === 0 ? t('Lyrics timing reset') : t(ms > 0 ? 'Lyrics {ms} ms earlier' : 'Lyrics {ms} ms later', { ms: Math.abs(ms) }));
+    flashStatus(ms === 0 ? t('Lyrics timing reset') : t(ms > 0 ? 'Lyrics {ms} ms earlier' : 'Lyrics {ms} ms later', { ms: Math.abs(ms) }));
 }
 function toggleUnify() {
     unifyPref = !unifyPref;
     write(UNIFY_KEY, unifyPref ? '1' : '0');
     if (song) buildPlan();
-    setStatus(t(unifyPref ? 'Same style within each song section' : 'Every line styled independently'));
+    flashStatus(t(unifyPref ? 'Same style within each song section' : 'Every line styled independently'));
 }
 function cycleKoma() {
     komaPref = KOMA_CYCLE[(KOMA_CYCLE.indexOf(komaPref) + 1) % KOMA_CYCLE.length];
     write(KOMA_KEY, komaPref === null ? null : String(komaPref));
     if (song) buildPlan();
-    setStatus(komaPref === null ? t('Motion: as the look picks') : komaPref === 0 ? t('Motion: smooth') : t('Motion: choppy, {fps} fps', { fps: komaPref }));
+    flashStatus(komaPref === null ? t('Motion: as the look picks') : komaPref === 0 ? t('Motion: smooth') : t('Motion: choppy, {fps} fps', { fps: komaPref }));
 }
 let hostFullscreen = false;          // the Windows app's own fullscreen (native.js setHostFullscreen)
 const isFullscreen = () => hostFullscreen || !!document.fullscreenElement;
@@ -461,7 +473,7 @@ function setPinned(on) {
     write(PIN_KEY, on ? '1' : null);
     showPin();
     showBarState();
-    setStatus(t(on ? 'Bar stays shown' : 'Bar hides when the mouse rests'));
+    flashStatus(t(on ? 'Bar stays shown' : 'Bar hides when the mouse rests'));
 }
 function showPin() {
     $('pin').classList.toggle('on', barPinned);
@@ -553,7 +565,7 @@ function boot() {
     player = new NativePlayer();
     // A failed read is retried; once it succeeds, the bar goes back to what it said before.
     let beforeError = null;
-    player.onError((err) => { beforeError ??= $('status').textContent; showError(err.message); });
+    player.onError((err) => { beforeError ??= baseStatus; showError(err.message); });
     player.onRecover(() => { if (beforeError !== null) setStatus(beforeError); beforeError = null; });
     player.start();
     showBar();
