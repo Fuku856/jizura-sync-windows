@@ -30,6 +30,8 @@ const JA = {
     'Motion: as the look picks': 'モーション: ルックに合わせる',
     'Motion: smooth': 'モーション: なめらか',
     'Motion: choppy, {fps} fps': 'モーション: コマ打ち {fps} fps',
+    'Bar stays shown': 'バーを常に表示',
+    'Bar hides when the mouse rests': 'マウスを止めるとバーを隠す',
 
     // index.html
     'Previous track': '前の曲',
@@ -39,9 +41,11 @@ const JA = {
     'Keyboard shortcuts': 'キーボードショートカット',
     'Fullscreen': 'フルスクリーン',
     'Exit fullscreen': 'フルスクリーンを終了',
+    'Keep the bar shown': 'バーを常に表示',
     'Controls': '操作',
     'Click': 'クリック',
-    'help.bar': 'バーを隠す / 表示する（<kbd>H</kbd> でも）',
+    'help.bar': 'バーをすぐ隠す。マウスを止めて数秒でも隠れ、動かすと戻る',
+    'help.h': 'バーを常に表示する / しない（ピンボタンでも）',
     'help.r': '新しいランダムなルック: スタイル、ムード、色、フォント、使うパーツ',
     'help.u': 'セクションごとに同じスタイル（オン）/ 行ごとに別のスタイル（オフ）',
     'help.k': 'モーション: ルックに合わせる → なめらか → コマ打ち 12 fps → 8 fps（手描きアニメ風）',

@@ -41,11 +41,12 @@ A look is picked for each song automatically; press `R` to switch to a different
 - The display stays awake while a song plays.
 - The app is in Japanese when Windows' display language is.
 
-The bar at the bottom shows the cover art, the track, the lyric source and playback controls. Press `?` or the `?` button for the list of controls.
+The bar at the bottom shows the cover art, the track, the lyric source and playback controls. It hides with the cursor once the mouse has rested for 3 seconds and comes back when it moves; the pin button keeps it shown. Press `?` or the `?` button for the list of controls.
 
 | Key | |
 |---|---|
-| Click, `H` | Hide / show the bar |
+| Click | Hide the bar now |
+| `H`, pin button | Keep the bar shown, or not |
 | `R` | Switch to a different look |
 | `U` | Unified look. On (the default): each block of the song (verse, chorus and so on) keeps one look, and a repeated chorus looks the same each time. Off: every lyric line is styled on its own |
 | `K` | Motion: as the look picks → smooth → 12 fps → 8 fps |

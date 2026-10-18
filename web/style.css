@@ -27,7 +27,7 @@ html, body {
 
 [hidden] { display: none !important; }
 
-/* now-playing bar: shown until a click outside it hides it (app.js toggles .bar-hidden) */
+/* now-playing bar: hides with the cursor when the pointer rests, unless pinned (app.js toggles .bar-hidden) */
 #bar {
   position: fixed;
   left: 16px;
@@ -81,6 +81,8 @@ body.bar-hidden #bar { opacity: 0; transform: translateY(12px); pointer-events: 
 #playPause.play .i-play { display: inline; }
 #fullscreen .i-exit, #fullscreen.on .i-enter { display: none; }
 #fullscreen.on .i-exit { display: inline; }
+#pin .i-on, #pin.on .i-off { display: none; }
+#pin.on .i-on { display: inline; }
 
 @media (max-width: 720px) {
   #bar {
