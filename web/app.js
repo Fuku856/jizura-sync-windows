@@ -405,6 +405,7 @@ function runKey(key) {
 window.addEventListener('keydown', (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey || (e.target instanceof HTMLInputElement && e.target.type !== 'range')) return;
     wake();                                 // before Tab moves focus: the bar's controls must not be inert by then
+    if (e.key === 'Tab') tabbed = true;
     if (runKey(e.key) && e.key === ' ') e.preventDefault();
 });
 window.addEventListener('dblclick', (e) => { if (!e.target.closest('#bar, #help')) toggleFullscreen(); });
@@ -419,15 +420,16 @@ window.addEventListener('resize', () => {
 
 // The cursor and (unless pinned) the bar hide once the pointer has rested for IDLE_MS, and come
 // back when it moves or a key is pressed. They stay while the pointer is on the bar, the seek
-// slider is dragged or a control in the bar has keyboard focus (a clicked button keeps plain focus).
-let idle = false, idleTimer = 0;
+// slider is dragged or Tab has moved focus into the bar. Not on `:focus-visible`: a clicked button
+// keeps focus and turns `:focus-visible` at the next key press, which held the bar up for good.
+let idle = false, idleTimer = 0, tabbed = false;
 function wake() {
     clearTimeout(idleTimer);
     idleTimer = setTimeout(rest, IDLE_MS);
     if (idle) setIdle(false);
 }
 function rest() {
-    if (el.bar.matches(':hover') || seeking || el.bar.querySelector(':focus-visible')) { idleTimer = setTimeout(rest, IDLE_MS); return; }
+    if (el.bar.matches(':hover') || seeking || (tabbed && el.bar.contains(document.activeElement))) { idleTimer = setTimeout(rest, IDLE_MS); return; }
     setIdle(true);
 }
 function setIdle(on) {
@@ -436,6 +438,7 @@ function setIdle(on) {
     showBarState();
 }
 window.addEventListener('pointermove', wake);
+window.addEventListener('pointerdown', () => { tabbed = false; });
 
 // ---------------------------------------------------------------- now-playing bar
 
