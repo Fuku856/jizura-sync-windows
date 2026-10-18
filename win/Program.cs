@@ -472,7 +472,7 @@ sealed class MainForm : Form
         core.Settings.IsZoomControlEnabled = false;
         core.SetVirtualHostNameToFolderMapping(Program.Host, root, CoreWebView2HostResourceAccessKind.Deny);
         core.WebMessageReceived += OnMessage;
-        core.ContainsFullScreenElementChanged += (_, _) => SetFullScreen(core.ContainsFullScreenElement);
+        core.NavigationCompleted += (_, _) => PostFullScreen();     // a reload (F5) in full screen
         // Links that leave the page (target=_blank, or any navigation off the page's origin) open in
         // the browser; only http(s), so nothing the page links to can open a file or another app.
         core.NewWindowRequested += (_, args) => { args.Handled = true; OpenExternal(args.Uri); };
@@ -493,7 +493,7 @@ sealed class MainForm : Form
         Process.Start(new ProcessStartInfo(url.AbsoluteUri) { UseShellExecute = true });
     }
 
-    // Page → native: { cmd: 'start' }, { cmd: 'dragWindow' } or a player command (see PlayerBridge.Command)
+    // Page → native: { cmd: 'start' }, { cmd: 'dragWindow' }, { cmd: 'fullscreen', on } or a player command (see PlayerBridge.Command)
     void OnMessage(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
         if (!e.Source.StartsWith(Origin, StringComparison.OrdinalIgnoreCase)) return;
@@ -510,6 +510,7 @@ sealed class MainForm : Form
                 ReleaseCapture();
                 PostMessage(Handle, WM_NCLBUTTONDOWN, HTCAPTION, (IntPtr)((p.Y << 16) | (p.X & 0xFFFF)));
                 break;
+            case "fullscreen": SetFullScreen((bool?)body["on"] == true); break;
             case "play" or "pause" or "next" or "previous" or "seek": bridge.Command(cmd, body); break;
             case "http": Fetch((JsonObject)body); break;
         }
@@ -627,11 +628,16 @@ sealed class MainForm : Form
         Bounds = bounds;
     }
 
-    /** The page went full screen (F, double-click, the button): cover the whole monitor. */
+    /**
+     * The page asked for full screen (F, double-click, the button; Esc to leave): cover the whole
+     * monitor. Not HTML fullscreen, where WebView2 takes Esc before the page sees it (native.js
+     * setHostFullscreen).
+     */
     void SetFullScreen(bool on)
     {
         if (on == fullScreen) return;
         fullScreen = on;
+        PostFullScreen();
         if (on)
         {
             maximizedBeforeFullScreen = WindowState == FormWindowState.Maximized;
@@ -647,6 +653,8 @@ sealed class MainForm : Form
             if (maximizedBeforeFullScreen) WindowState = FormWindowState.Maximized;
         }
     }
+
+    void PostFullScreen() => web.CoreWebView2?.PostWebMessageAsJson(fullScreen ? """{"fullscreen":true}""" : """{"fullscreen":false}""");
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {

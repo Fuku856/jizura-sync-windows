@@ -6,7 +6,7 @@
 // position every animation frame. Seeks, pauses and track skips need no extra state.
 
 import { fetchLyrics, lrcToJizura } from './lyrics.js';
-import { hasNative, NativePlayer } from './native.js';
+import { hasNative, NativePlayer, setHostFullscreen, onHostFullscreen } from './native.js';
 import { t, localizePage } from './i18n.js';
 
 localizePage();          // before anything below reads or replaces the page's text
@@ -347,16 +347,20 @@ function cycleKoma() {
     if (song) buildPlan();
     setStatus(komaPref === null ? t('Motion: as the look picks') : komaPref === 0 ? t('Motion: smooth') : t('Motion: choppy, {fps} fps', { fps: komaPref }));
 }
+let hostFullscreen = false;          // the Windows app's own fullscreen (native.js setHostFullscreen)
+const isFullscreen = () => hostFullscreen || !!document.fullscreenElement;
 function toggleFullscreen() {
-    if (document.fullscreenElement) document.exitFullscreen();
+    if (hasNative()) setHostFullscreen(!hostFullscreen);
+    else if (document.fullscreenElement) document.exitFullscreen();
     else document.documentElement.requestFullscreen?.();
 }
 // The button shows what it will do: enter, or exit while in fullscreen (also left by Esc).
-document.addEventListener('fullscreenchange', () => {
-    const on = !!document.fullscreenElement;
+function showFullscreen(on) {
     $('fullscreen').classList.toggle('on', on);
     $('fullscreen').setAttribute('aria-label', t(on ? 'Exit fullscreen' : 'Fullscreen'));
-});
+}
+document.addEventListener('fullscreenchange', () => showFullscreen(!!document.fullscreenElement));
+onHostFullscreen((on) => { hostFullscreen = on; showFullscreen(on); });
 
 /** One control, by its key name. */
 function runKey(key) {
@@ -374,7 +378,11 @@ function runKey(key) {
         case 'f': toggleFullscreen(); break;
         case 'h': toggleBar(); break;
         case '?': $('help').hidden = !$('help').hidden; break;
-        case 'escape': $('help').hidden = true; break;
+        case 'escape':
+            // The help first. A browser leaves its own fullscreen on Esc; the Windows app leaves on the next one.
+            if (!$('help').hidden) $('help').hidden = true;
+            else if (hostFullscreen) setHostFullscreen(false);
+            break;
         default: return false;
     }
     wake();
@@ -502,7 +510,7 @@ class MockPlayer {
 function watchDrag(native) {
     let down = null;
     window.addEventListener('pointerdown', (e) => {
-        down = e.button === 0 && !document.fullscreenElement && !e.target.closest('#bar, #help, #toast') ? [e.screenX, e.screenY] : null;
+        down = e.button === 0 && !isFullscreen() && !e.target.closest('#bar, #help, #toast') ? [e.screenX, e.screenY] : null;
     });
     window.addEventListener('pointermove', (e) => {
         if (!down || !(e.buttons & 1)) { down = null; return; }

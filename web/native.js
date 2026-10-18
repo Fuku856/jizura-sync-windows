@@ -11,6 +11,16 @@ const webview = () => window.chrome?.webview;
 
 export const hasNative = () => !!webview();
 
+/**
+ * The Windows app's fullscreen: the host sizes its window over the monitor itself, because in HTML
+ * fullscreen WebView2 takes Esc to leave it before the page sees the key (so Esc could not close the
+ * help first). The host posts `{fullscreen: bool}` on every change.
+ */
+export function setHostFullscreen(on) { webview().postMessage({ cmd: 'fullscreen', on }); }
+export function onHostFullscreen(fn) {
+    webview()?.addEventListener('message', (e) => { if (e.data?.fullscreen !== undefined) fn(e.data.fullscreen); });
+}
+
 /** How long the page waits for the host's answer to `nativeHttp` (the host itself gives up at 10 s). */
 const HTTP_TIMEOUT_MS = 15000;
 const httpWaiting = new Map();      // id -> { resolve, reject }, each also clearing its timer and abort listener
@@ -103,7 +113,7 @@ export class NativePlayer {
     }
 
     _update(s) {
-        if (s.http !== undefined) return;          // an answer to nativeHttp, not a reading
+        if (s.http !== undefined || s.fullscreen !== undefined) return;   // not a reading
         if (s.seq < this._seq) return;
         if (s.error) {
             s.error.message = errorText(s.error);
