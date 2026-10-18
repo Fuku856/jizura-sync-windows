@@ -351,6 +351,12 @@ function toggleFullscreen() {
     if (document.fullscreenElement) document.exitFullscreen();
     else document.documentElement.requestFullscreen?.();
 }
+// The button shows what it will do: enter, or exit while in fullscreen (also left by Esc).
+document.addEventListener('fullscreenchange', () => {
+    const on = !!document.fullscreenElement;
+    $('fullscreen').classList.toggle('on', on);
+    $('fullscreen').setAttribute('aria-label', t(on ? 'Exit fullscreen' : 'Fullscreen'));
+});
 
 /** One control, by its key name. */
 function runKey(key) {
