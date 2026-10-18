@@ -350,7 +350,7 @@ function cycleKoma() {
 let hostFullscreen = false;          // the Windows app's own fullscreen (native.js setHostFullscreen)
 const isFullscreen = () => hostFullscreen || !!document.fullscreenElement;
 function toggleFullscreen() {
-    if (hasNative()) setHostFullscreen(!hostFullscreen);
+    if (hasNative()) setHostFullscreen();
     else if (document.fullscreenElement) document.exitFullscreen();
     else document.documentElement.requestFullscreen?.();
 }

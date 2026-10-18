@@ -14,7 +14,7 @@ export const hasNative = () => !!webview();
 /**
  * The Windows app's fullscreen: the host sizes its window over the monitor itself, because in HTML
  * fullscreen WebView2 takes Esc to leave it before the page sees the key (so Esc could not close the
- * help first). The host posts `{fullscreen: bool}` on every change.
+ * help first). With no `on` the host flips it. The host posts `{fullscreen: bool}` on every change.
  */
 export function setHostFullscreen(on) { webview().postMessage({ cmd: 'fullscreen', on }); }
 export function onHostFullscreen(fn) {
