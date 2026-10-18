@@ -58,8 +58,10 @@ const KOMA_CYCLE = [null, 0, 12, 8];
 // accent ("kime") lines. JIZURA defaults it off and its random look never sets it; without it
 // every cut is an independent draw, which reads as random. On by default here.
 const UNIFY_KEY = 'jizura-sync.unify';
-// The now-playing bar is shown until the user clicks it away; the choice sticks.
-const BAR_KEY = 'jizura-sync.barHidden';
+// The now-playing bar hides once the pointer rests, unless it is pinned; the pin sticks.
+const PIN_KEY = 'jizura-sync.barPinned';
+const IDLE_MS = 3000;
+const FLASH_MS = 3000;        // a control's feedback in the status line, before it says what it said again
 
 let player = null;
 let trackId = null;          // track the current plan belongs to
@@ -73,7 +75,7 @@ let lookup = null;           // AbortController of the lyric lookup running for 
 let offsetMs = Number(read(OFFSET_KEY)) || 0;
 let komaPref = read(KOMA_KEY) === null ? null : Number(read(KOMA_KEY));
 let unifyPref = read(UNIFY_KEY) !== '0';
-let barHidden = read(BAR_KEY) === '1';
+let barPinned = read(PIN_KEY) === '1';
 
 // ---------------------------------------------------------------- project / plan
 
@@ -314,15 +316,26 @@ function showNotice(text) {
     $('notice').hidden = false;
 }
 
-function setStatus(text) { $('status').textContent = text; wake(); }
+// The status line says what the song is drawn with (or what went wrong); a control's feedback
+// (flashStatus) takes it over for FLASH_MS, then the line goes back to the latest setStatus.
+let baseStatus = '', flashTimer = 0;
+function setStatus(text) {
+    baseStatus = text;
+    if (!flashTimer) $('status').textContent = text;
+}
+function flashStatus(text) {
+    $('status').textContent = text;
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => { flashTimer = 0; $('status').textContent = baseStatus; }, FLASH_MS);
+}
 function togglePlay() { if (player) (player.isPlaying() ? player.pause() : player.play()); }
 
-// Errors also reach a user who hid the bar: a toast outside it, once per distinct message
+// Errors also reach a user while the bar is hidden: a toast outside it, once per distinct message
 // while nothing plays (a missing device reports every 3 s).
 let lastError = null, toastTimer = 0;
 function showError(text) {
     setStatus(text);
-    if (!barHidden || $('bar').hidden || text === lastError) return;
+    if (!barAway() || $('bar').hidden || text === lastError) return;
     lastError = text;
     $('toast').textContent = text;
     $('toast').hidden = false;
@@ -333,19 +346,19 @@ function showError(text) {
 function setOffset(ms) {
     offsetMs = ms;
     write(OFFSET_KEY, String(ms));
-    setStatus(ms === 0 ? t('Lyrics timing reset') : t(ms > 0 ? 'Lyrics {ms} ms earlier' : 'Lyrics {ms} ms later', { ms: Math.abs(ms) }));
+    flashStatus(ms === 0 ? t('Lyrics timing reset') : t(ms > 0 ? 'Lyrics {ms} ms earlier' : 'Lyrics {ms} ms later', { ms: Math.abs(ms) }));
 }
 function toggleUnify() {
     unifyPref = !unifyPref;
     write(UNIFY_KEY, unifyPref ? '1' : '0');
     if (song) buildPlan();
-    setStatus(t(unifyPref ? 'Same style within each song section' : 'Every line styled independently'));
+    flashStatus(t(unifyPref ? 'Same style within each song section' : 'Every line styled independently'));
 }
 function cycleKoma() {
     komaPref = KOMA_CYCLE[(KOMA_CYCLE.indexOf(komaPref) + 1) % KOMA_CYCLE.length];
     write(KOMA_KEY, komaPref === null ? null : String(komaPref));
     if (song) buildPlan();
-    setStatus(komaPref === null ? t('Motion: as the look picks') : komaPref === 0 ? t('Motion: smooth') : t('Motion: choppy, {fps} fps', { fps: komaPref }));
+    flashStatus(komaPref === null ? t('Motion: as the look picks') : komaPref === 0 ? t('Motion: smooth') : t('Motion: choppy, {fps} fps', { fps: komaPref }));
 }
 let hostFullscreen = false;          // the Windows app's own fullscreen (native.js setHostFullscreen)
 const isFullscreen = () => hostFullscreen || !!document.fullscreenElement;
@@ -376,7 +389,7 @@ function runKey(key) {
         case ']': setOffset(offsetMs + OFFSET_STEP_MS); break;
         case ' ': togglePlay(); break;
         case 'f': toggleFullscreen(); break;
-        case 'h': toggleBar(); break;
+        case 'h': setPinned(!barPinned); break;
         case '?': $('help').hidden = !$('help').hidden; break;
         case 'escape':
             // The help first. A browser leaves its own fullscreen on Esc; the Windows app leaves on the next one.
@@ -391,6 +404,8 @@ function runKey(key) {
 
 window.addEventListener('keydown', (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey || (e.target instanceof HTMLInputElement && e.target.type !== 'range')) return;
+    wake();                                 // before Tab moves focus: the bar's controls must not be inert by then
+    if (e.key === 'Tab') tabbed = true;
     if (runKey(e.key) && e.key === ' ') e.preventDefault();
 });
 window.addEventListener('dblclick', (e) => { if (!e.target.closest('#bar, #help')) toggleFullscreen(); });
@@ -403,13 +418,27 @@ window.addEventListener('resize', () => {
     resizeTimer = setTimeout(() => { if (song && windowAspect() !== planAspect) buildPlan(); }, 300);
 });
 
-let idleTimer = 0;
+// The cursor and (unless pinned) the bar hide once the pointer has rested for IDLE_MS, and come
+// back when it moves or a key is pressed. They stay while the pointer is on the bar, the seek
+// slider is dragged or Tab has moved focus into the bar. Not on `:focus-visible`: a clicked button
+// keeps focus and turns `:focus-visible` at the next key press, which held the bar up for good.
+let idle = false, idleTimer = 0, tabbed = false;
 function wake() {
-    document.body.classList.remove('idle');
     clearTimeout(idleTimer);
-    idleTimer = setTimeout(() => document.body.classList.add('idle'), 3000);
+    idleTimer = setTimeout(rest, IDLE_MS);
+    if (idle) setIdle(false);
+}
+function rest() {
+    if (el.bar.matches(':hover') || seeking || (tabbed && el.bar.contains(document.activeElement))) { idleTimer = setTimeout(rest, IDLE_MS); return; }
+    setIdle(true);
+}
+function setIdle(on) {
+    idle = on;
+    document.body.classList.toggle('idle', on);
+    showBarState();
 }
 window.addEventListener('pointermove', wake);
+window.addEventListener('pointerdown', () => { tabbed = false; });
 
 // ---------------------------------------------------------------- now-playing bar
 
@@ -420,8 +449,8 @@ function fmtTime(ms) {
 
 let seeking = false;         // the slider is being dragged: do not move it under the pointer
 function updateBar(state) {
-    // Clicked away, it is out of sight: it catches up on the frame it comes back.
-    if (el.bar.hidden || barHidden) return;
+    // Out of sight, it catches up on the frame it comes back.
+    if (el.bar.hidden || barAway()) return;
     el.playPause.classList.toggle('play', !player?.isPlaying());
     if (!state) return;
     const elapsed = fmtTime(state.positionMs), total = fmtTime(state.durationMs);
@@ -431,24 +460,34 @@ function updateBar(state) {
     if (!seeking && el.seek.value !== pos) el.seek.value = pos;
 }
 
+const barAway = () => idle && !barPinned;
 function showBar() {
     $('bar').hidden = false;
-    document.body.classList.toggle('bar-hidden', barHidden);
-    $('bar').inert = barHidden;             // hidden controls must not take focus or keys
+    showBarState();
 }
-function toggleBar() {
-    if ($('bar').hidden) return;
-    barHidden = !barHidden;
-    write(BAR_KEY, barHidden ? '1' : null);
-    $('toast').hidden = true;
-    lastError = null;
-    document.body.classList.toggle('bar-hidden', barHidden);
-    $('bar').inert = barHidden;
+function showBarState() {
+    const away = barAway();
+    document.body.classList.toggle('bar-hidden', away);
+    el.bar.inert = away;                    // hidden controls must not take focus or keys
+    if (!away) $('toast').hidden = true;    // the bar says it, and the toast would cover it
 }
+function setPinned(on) {
+    barPinned = on;
+    write(PIN_KEY, on ? '1' : null);
+    showPin();
+    showBarState();
+    flashStatus(t(on ? 'Bar stays shown' : 'Bar hides when the mouse rests'));
+}
+function showPin() {
+    $('pin').classList.toggle('on', barPinned);
+    $('pin').setAttribute('aria-pressed', String(barPinned));
+}
+showPin();
 
 $('prev').addEventListener('click', () => player?.previous());
 $('next').addEventListener('click', () => player?.next());
 $('playPause').addEventListener('click', togglePlay);
+$('pin').addEventListener('click', () => setPinned(!barPinned));
 $('fullscreen').addEventListener('click', toggleFullscreen);
 $('helpButton').addEventListener('click', () => { $('help').hidden = !$('help').hidden; });
 $('help').addEventListener('click', (e) => { if (e.target === $('help')) $('help').hidden = true; });
@@ -465,14 +504,14 @@ $('seek').addEventListener('change', () => {
 // `change` does not fire when a drag ends where it started or is cancelled.
 for (const ev of ['pointerup', 'pointercancel', 'blur']) $('seek').addEventListener(ev, () => { seeking = false; });
 
-// A click anywhere outside the bar toggles it. Delayed so that a double click (fullscreen)
-// does not flash the bar off and on.
+// A click anywhere outside the bar hides it (and the cursor) at once, as resting would. Delayed so
+// that a double click (fullscreen) does not flash the bar off.
 let clickTimer = 0;
 window.addEventListener('click', (e) => {
     if (e.target.closest('#bar, #help, #toast')) return;
     clearTimeout(clickTimer);
     if (e.detail > 1) return;
-    clickTimer = setTimeout(toggleBar, 250);
+    clickTimer = setTimeout(() => { clearTimeout(idleTimer); setIdle(true); }, 250);
 });
 
 // ---------------------------------------------------------------- boot
@@ -529,7 +568,7 @@ function boot() {
     player = new NativePlayer();
     // A failed read is retried; once it succeeds, the bar goes back to what it said before.
     let beforeError = null;
-    player.onError((err) => { beforeError ??= $('status').textContent; showError(err.message); });
+    player.onError((err) => { beforeError ??= baseStatus; showError(err.message); });
     player.onRecover(() => { if (beforeError !== null) setStatus(beforeError); beforeError = null; });
     player.start();
     showBar();
