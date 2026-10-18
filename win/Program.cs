@@ -472,13 +472,17 @@ sealed class MainForm : Form
         core.Settings.IsZoomControlEnabled = false;
         core.SetVirtualHostNameToFolderMapping(Program.Host, root, CoreWebView2HostResourceAccessKind.Deny);
         core.WebMessageReceived += OnMessage;
-        core.ContainsFullScreenElementChanged += (_, _) => SetFullScreen(core.ContainsFullScreenElement);
         // Links that leave the page (target=_blank, or any navigation off the page's origin) open in
         // the browser; only http(s), so nothing the page links to can open a file or another app.
         core.NewWindowRequested += (_, args) => { args.Handled = true; OpenExternal(args.Uri); };
         core.NavigationStarting += (_, args) =>
         {
-            if (args.Uri.StartsWith(Origin, StringComparison.OrdinalIgnoreCase)) return;
+            if (args.Uri.StartsWith(Origin, StringComparison.OrdinalIgnoreCase))
+            {
+                // Only the page leaves full screen (Esc); one that fails to load could not.
+                SetFullScreen(false);
+                return;
+            }
             args.Cancel = true;
             OpenExternal(args.Uri);
         };
@@ -493,7 +497,7 @@ sealed class MainForm : Form
         Process.Start(new ProcessStartInfo(url.AbsoluteUri) { UseShellExecute = true });
     }
 
-    // Page → native: { cmd: 'start' }, { cmd: 'dragWindow' } or a player command (see PlayerBridge.Command)
+    // Page → native: { cmd: 'start' }, { cmd: 'dragWindow' }, { cmd: 'fullscreen', on? } or a player command (see PlayerBridge.Command)
     void OnMessage(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
         if (!e.Source.StartsWith(Origin, StringComparison.OrdinalIgnoreCase)) return;
@@ -509,6 +513,10 @@ sealed class MainForm : Form
                 GetCursorPos(out var p);
                 ReleaseCapture();
                 PostMessage(Handle, WM_NCLBUTTONDOWN, HTCAPTION, (IntPtr)((p.Y << 16) | (p.X & 0xFFFF)));
+                break;
+            case "fullscreen":
+                // Without `on` it flips here, so two quick presses do not both ask for the state the page last heard of.
+                SetFullScreen(body["on"] is JsonValue v && v.TryGetValue(out bool on) ? on : !fullScreen);
                 break;
             case "play" or "pause" or "next" or "previous" or "seek": bridge.Command(cmd, body); break;
             case "http": Fetch((JsonObject)body); break;
@@ -627,11 +635,16 @@ sealed class MainForm : Form
         Bounds = bounds;
     }
 
-    /** The page went full screen (F, double-click, the button): cover the whole monitor. */
+    /**
+     * The page asked for full screen (F, double-click, the button; Esc to leave): cover the whole
+     * monitor. Not HTML fullscreen, where WebView2 takes Esc before the page sees it (native.js
+     * setHostFullscreen).
+     */
     void SetFullScreen(bool on)
     {
         if (on == fullScreen) return;
         fullScreen = on;
+        web.CoreWebView2?.PostWebMessageAsJson(on ? """{"fullscreen":true}""" : """{"fullscreen":false}""");
         if (on)
         {
             maximizedBeforeFullScreen = WindowState == FormWindowState.Maximized;

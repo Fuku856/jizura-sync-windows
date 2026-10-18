@@ -79,6 +79,8 @@ body.bar-hidden #bar { opacity: 0; transform: translateY(12px); pointer-events: 
 #playPause:hover { background: #fff; }
 #playPause .i-play, #playPause.play .i-pause { display: none; }
 #playPause.play .i-play { display: inline; }
+#fullscreen .i-exit, #fullscreen.on .i-enter { display: none; }
+#fullscreen.on .i-exit { display: inline; }
 
 @media (max-width: 720px) {
   #bar {

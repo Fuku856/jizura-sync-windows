@@ -38,6 +38,7 @@ const JA = {
     'Seek': 'シーク',
     'Keyboard shortcuts': 'キーボードショートカット',
     'Fullscreen': 'フルスクリーン',
+    'Exit fullscreen': 'フルスクリーンを終了',
     'Controls': '操作',
     'Click': 'クリック',
     'help.bar': 'バーを隠す / 表示する（<kbd>H</kbd> でも）',
