@@ -1,7 +1,8 @@
-# Publishing a release by hand on GitHub builds the Windows installer and attaches it to that release.
+# Publishing a release by hand on GitHub builds the Windows installer and zip and attaches them to
+# that release.
 #
 # - A release must be created with Target: main, a pre-release with Target: dev. The job builds the
-#   release's tag, not the branch tip, so the setup.exe, the tag and GitHub's "Source code" archives are
+#   release's tag, not the branch tip, so the installer, the zip, the tag and GitHub's "Source code" archives are
 #   the same commit; it fails if the tag is not on the branch its kind calls for.
 # - The tag is the version: v1.2.3 or v1.2.3-beta.1 (the exe's file version drops the suffix).
 # - GitHub runs this file as it is in the tagged commit, so the branch you tag must already have it.
@@ -147,8 +148,12 @@ jobs:
         shell: powershell
         run: powershell -ExecutionPolicy Bypass -File tools/build-installer.ps1 -Version $env:VERSION
 
-      - name: Upload
+      # The installer, and the same build\win as a zip for those who would rather not install.
+      - name: Package and upload
         shell: powershell
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload $env:TAG "build/installer/jizura-sync-v$env:VERSION-win-x64.exe" --clobber
+        run: |
+          $zip = "jizura-sync-$env:TAG-win-x64.zip"
+          Compress-Archive -Path build/win/* -DestinationPath $zip
+          gh release upload $env:TAG "build/installer/jizura-sync-v$env:VERSION-win-x64.exe" $zip --clobber

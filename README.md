@@ -58,19 +58,28 @@ Windows で再生中の曲の歌詞を、リアルタイムで歌詞モーショ
 ## 必要なもの
 
 - Windows 10 バージョン 2004 以降、または Windows 11（x64）
-- [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)（x64）と WebView2 Runtime。どちらも、無ければインストーラーが Microsoft から取得して入れる（.NET のときだけ管理者の許可を求められる）
+- [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)（x64）と WebView2 Runtime。インストーラーは、無ければ Microsoft から取得して入れる（.NET のときだけ管理者の許可を求められる）。zip 版では自分で入れる（WebView2 は Windows 11 には最初から入っている。無い場合は [Microsoft のページ](https://developer.microsoft.com/microsoft-edge/webview2/) から）
 
 ## インストール
 
-1. [Releases](https://github.com/Fuku856/jizura-sync-windows/releases) から `jizura-sync-<バージョン>-win-x64.exe` をダウンロードする
-2. ダウンロードした exe を実行する。管理者権限は要らず、自分のユーザーだけに入る（`%LOCALAPPDATA%\Programs\jizura-sync`）
-3. スタートメニューの jizura-sync を起動し、好きなプレイヤー（ブラウザのタブも可）で曲を再生する
+[Releases](https://github.com/Fuku856/jizura-sync-windows/releases) に、インストーラー（`.exe`）と zip の 2 つがある。中身は同じで、設定も同じ場所（`%LOCALAPPDATA%\jizura-sync`）に置かれる。
 
 コード署名をしていないので、SmartScreen の警告が出ることがある。その場合は「詳細情報」→「実行」で進める。
 
-- **更新**: 新しい版の exe を実行する。起動中なら閉じてから入れ直す。設定は `%LOCALAPPDATA%\jizura-sync` にあるので引き継がれる
-- **zip 版から移るとき**: 設定は同じ場所なのでそのまま使える。展開したフォルダは消してよい
+### インストーラー
+
+1. `jizura-sync-<バージョン>-win-x64.exe` をダウンロードして実行する。管理者権限は要らず、自分のユーザーだけに入る（`%LOCALAPPDATA%\Programs\jizura-sync`）
+2. スタートメニューの jizura-sync を起動し、好きなプレイヤー（ブラウザのタブも可）で曲を再生する
+
+- **更新**: 新しい版の exe を実行する。起動中なら閉じてから入れ直す。設定は引き継がれる
 - **アンインストール**: Windows の「設定」→「アプリ」から。設定も消すときは、そのあと `%LOCALAPPDATA%\jizura-sync` を消す
+
+### zip
+
+1. `jizura-sync-<バージョン>-win-x64.zip` をダウンロードし、好きな場所に展開する
+2. `jizura-sync.exe` を起動する（`WebView2Loader.dll` と `web` フォルダは exe の隣に置いたままにする）
+
+更新するときは、新しい zip を展開し直す。設定は引き継がれる。インストーラー版と zip 版は設定を共有するので、同時には起動できない。
 
 ## 制限
 
@@ -120,7 +129,7 @@ powershell -ExecutionPolicy Bypass -File tools/build-installer.ps1 -Version 1.2.
 
 ### リリース
 
-`main` が最新のリリース、`dev` が開発中の版にあたる。GitHub でリリースを公開すると、[`release-windows.yml`](.github/workflows/release-windows.yml) がそのタグからインストーラーを作って添付し、リリースノートを書く。
+`main` が最新のリリース、`dev` が開発中の版にあたる。GitHub でリリースを公開すると、[`release-windows.yml`](.github/workflows/release-windows.yml) がそのタグからインストーラーと zip を作って添付し、リリースノートを書く。
 
 - タグがバージョンになる（`v1.2.3`、プレリリースは `v1.2.3-beta.1`）
 - リリースは Target を `main`、プレリリースは `dev` にして作る
