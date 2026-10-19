@@ -58,18 +58,19 @@ The bar at the bottom shows the cover art, the track, the lyric source and playb
 ## Requirements
 
 - Windows 10 version 2004 or later, or Windows 11 (x64)
-- [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) (x64)
-- WebView2 Runtime (Windows 11 already has it; otherwise install it from [Microsoft](https://developer.microsoft.com/microsoft-edge/webview2/))
+- The [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) (x64) and the WebView2 Runtime. The installer downloads either from Microsoft and installs it when it is missing (only .NET asks for administrator permission).
 
 ## Install
 
-1. Download `jizura-sync-<version>-win-x64.zip` from [Releases](https://github.com/Fuku856/jizura-sync-windows/releases).
-2. Extract it anywhere and run `jizura-sync.exe` (keep `WebView2Loader.dll` and the `web` folder next to the exe).
-3. Play a song in any player (a browser tab works too).
+1. Download `jizura-sync-<version>-win-x64.exe` from [Releases](https://github.com/Fuku856/jizura-sync-windows/releases).
+2. Run it. It needs no administrator rights and installs for your user only (`%LOCALAPPDATA%\Programs\jizura-sync`).
+3. Start jizura-sync from the Start menu and play a song in any player (a browser tab works too).
 
-The app is not code-signed, so SmartScreen may warn the first time; choose "More info" → "Run anyway".
+The installer is not code-signed, so SmartScreen may warn; choose "More info" → "Run anyway".
 
-To update, extract the new zip. Settings live in `%LOCALAPPDATA%\jizura-sync` and carry over.
+- **Update**: run the new version's exe. Close the app first if it is running. Settings live in `%LOCALAPPDATA%\jizura-sync` and carry over.
+- **Moving from the zip**: settings are in the same place and carry over; the extracted folder can be deleted.
+- **Uninstall**: from Windows Settings → Apps. To remove the settings too, delete `%LOCALAPPDATA%\jizura-sync` afterwards.
 
 ## Limitations
 
@@ -79,7 +80,7 @@ To update, extract the new zip. Settings live in `%LOCALAPPDATA%\jizura-sync` an
 - No beat sync (the player's audio cannot be read).
 - Fonts load from Google Fonts, so offline the looks are not quite right.
 - Not yet tried with Spotify for Windows or Apple Music for Windows (browser tabs are tested).
-- No installer, auto-update or code signing.
+- No auto-update or code signing.
 
 ## For developers
 
@@ -97,6 +98,14 @@ powershell -ExecutionPolicy Bypass -File tools/build-win.ps1
 
 This makes `jizura-sync.exe`, `WebView2Loader.dll` and `web` in `build\win`. Cloned without `--recursive`? Run `git submodule update --init` before building.
 
+The installer is made with [Inno Setup 6](https://jrsoftware.org/isinfo.php) (6.6 or later). Install it with `winget install JRSoftware.InnoSetup`, then:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/build-installer.ps1 -Version 1.2.3
+```
+
+This runs the build above, then makes `build\installer\jizura-sync-v1.2.3-win-x64.exe`. Without `-Version` it uses the csproj's `<Version>`.
+
 ### Debugging
 
 Run `build\win\jizura-sync.exe` with these set:
@@ -111,7 +120,7 @@ For the page alone, start `./serve.sh` and open <http://127.0.0.1:5180/?mock> in
 
 ### Releases
 
-`main` is the latest release and `dev` the version in development. Publishing a release on GitHub runs [`release-windows.yml`](.github/workflows/release-windows.yml), which builds that tag, attaches the zip and writes the release notes.
+`main` is the latest release and `dev` the version in development. Publishing a release on GitHub runs [`release-windows.yml`](.github/workflows/release-windows.yml), which builds the installer from that tag, attaches it and writes the release notes.
 
 - The tag is the version (`v1.2.3`, or `v1.2.3-beta.1` for a pre-release).
 - Create a release with Target `main` and a pre-release with Target `dev`.

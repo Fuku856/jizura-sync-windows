@@ -1,7 +1,7 @@
-# Publishing a release by hand on GitHub builds the Windows app and attaches it to that release.
+# Publishing a release by hand on GitHub builds the Windows installer and attaches it to that release.
 #
 # - A release must be created with Target: main, a pre-release with Target: dev. The job builds the
-#   release's tag, not the branch tip, so the zip, the tag and GitHub's "Source code" archives are
+#   release's tag, not the branch tip, so the setup.exe, the tag and GitHub's "Source code" archives are
 #   the same commit; it fails if the tag is not on the branch its kind calls for.
 # - The tag is the version: v1.2.3 or v1.2.3-beta.1 (the exe's file version drops the suffix).
 # - GitHub runs this file as it is in the tagged commit, so the branch you tag must already have it.
@@ -137,15 +137,18 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      # The runner image has Inno Setup 6 (6.7.1 on 2026-10-19); this only covers an image without it.
+      - name: Check Inno Setup
+        shell: powershell
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+
       - name: Build
         shell: powershell
-        run: powershell -ExecutionPolicy Bypass -File tools/build-win.ps1 -Version $env:VERSION
+        run: powershell -ExecutionPolicy Bypass -File tools/build-installer.ps1 -Version $env:VERSION
 
-      - name: Package and upload
+      - name: Upload
         shell: powershell
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          $zip = "jizura-sync-$env:TAG-win-x64.zip"
-          Compress-Archive -Path build/win/* -DestinationPath $zip
-          gh release upload $env:TAG $zip --clobber
+        run: gh release upload $env:TAG "build/installer/jizura-sync-v$env:VERSION-win-x64.exe" --clobber
