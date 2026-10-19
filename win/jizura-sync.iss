@@ -59,12 +59,11 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 [CustomMessages]
 ja.PrereqsHeading=あわせて Microsoft から取得して入れるもの:
 en.PrereqsHeading=Also downloaded from Microsoft and installed:
-ja.DotNetName=.NET 10 Desktop Runtime
-en.DotNetName=.NET 10 Desktop Runtime
+; Product names, the same in both languages.
+DotNetName=.NET 10 Desktop Runtime
+WebView2Name=WebView2 Runtime
 ja.DotNetNote=（管理者の許可を求めます）
 en.DotNetNote= (asks for administrator permission)
-ja.WebView2Name=WebView2 Runtime
-en.WebView2Name=WebView2 Runtime
 ja.InstallingPrereq=%1 をインストールしています...
 en.InstallingPrereq=Installing %1...
 ja.ExitCode=終了コード %1
@@ -104,13 +103,28 @@ var
   DownloadPage: TDownloadWizardPage;
   NeedDotNet, NeedWebView2: Boolean;
 
-// The app is framework-dependent: its apphost looks for the runtime in Program Files\dotnet.
-function HasDotNet: Boolean;
+// A released 10.x under Root: the app does not roll forward to a preview such as 10.0.0-rc.2.
+function HasDotNetIn(const Root: String): Boolean;
 var
   F: TFindRec;
 begin
-  Result := FindFirst(ExpandConstant('{commonpf64}\dotnet\shared\Microsoft.WindowsDesktop.App\10.*'), F);
-  if Result then FindClose(F);
+  Result := False;
+  if FindFirst(Root + '\shared\Microsoft.WindowsDesktop.App\10.*', F) then
+    try
+      repeat
+        if (F.Attributes and FILE_ATTRIBUTE_DIRECTORY <> 0) and (Pos('-', F.Name) = 0) then Result := True;
+      until Result or not FindNext(F);
+    finally
+      FindClose(F);
+    end;
+end;
+
+// The app is framework-dependent: its apphost looks for the runtime in Program Files\dotnet, or in
+// Program Files\dotnet\x64 on Arm64 Windows, where x64 .NET lives beside the Arm64 one.
+function HasDotNet: Boolean;
+begin
+  Result := HasDotNetIn(ExpandConstant('{commonpf64}\dotnet'));
+  if not Result and IsArm64 then Result := HasDotNetIn(ExpandConstant('{commonpf64}\dotnet\x64'));
 end;
 
 function WebView2Version(Root: Integer; const Key: String): String;
@@ -166,11 +180,17 @@ end;
 // the user why not.
 function RunPrereq(IsDotNet: Boolean): Boolean;
 var
-  Name, Why: String;
+  Name, Page, Why: String;
   Code: Integer;
   Started: Boolean;
 begin
-  if IsDotNet then Name := CustomMessage('DotNetName') else Name := CustomMessage('WebView2Name');
+  if IsDotNet then begin
+    Name := CustomMessage('DotNetName');
+    Page := DotNetPage;
+  end else begin
+    Name := CustomMessage('WebView2Name');
+    Page := WebView2Page;
+  end;
   DownloadPage.SetText(FmtMessage(CustomMessage('InstallingPrereq'), [Name]), '');
   if IsDotNet then
     Started := ShellExec('runas', ExpandConstant('{tmp}\windowsdesktop-runtime-win-x64.exe'),
@@ -196,11 +216,7 @@ begin
     Why := FmtMessage(CustomMessage('ExitCode'), [Format('0x%.8x', [Code])])
   else
     Why := CustomMessage('StillMissing');
-  if not Result then
-    if IsDotNet then
-      SuppressibleMsgBox(FmtMessage(CustomMessage('PrereqFailed'), [Name, Why, DotNetPage]), mbCriticalError, MB_OK, IDOK)
-    else
-      SuppressibleMsgBox(FmtMessage(CustomMessage('PrereqFailed'), [Name, Why, WebView2Page]), mbCriticalError, MB_OK, IDOK);
+  SuppressibleMsgBox(FmtMessage(CustomMessage('PrereqFailed'), [Name, Why, Page]), mbCriticalError, MB_OK, IDOK);
 end;
 
 // After Install on the ready page: download what is missing, then install it. False keeps the wizard
