@@ -12,6 +12,8 @@
 
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Web.WebView2.Core;
@@ -29,6 +31,21 @@ static class Program
     public static readonly string DataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "jizura-sync");
     static readonly string? logFile = Environment.GetEnvironmentVariable("JIZURA_LOG");
 
+    /**
+     * One copy per data folder: two would share the WebView2 profile, localStorage and window.json
+     * (an installed copy and a zip copy both use DataDir). Named after a hash of the folder, since a
+     * mutex name cannot hold backslashes; a copy on another folder runs beside it.
+     */
+    static readonly string InstanceName = "jizura-sync-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(DataDir.ToUpperInvariant())))[..16];
+    /** Sent to every top-level window by a second copy: the running one comes to the front. */
+    public static readonly int ShowMessage = RegisterWindowMessage(InstanceName);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int RegisterWindowMessage(string name);
+    [DllImport("user32.dll")] static extern bool AllowSetForegroundWindow(int processId);
+    [DllImport("user32.dll")] static extern bool PostMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam);
+    const int ASFW_ANY = -1;
+    static readonly IntPtr HWND_BROADCAST = 0xFFFF;
+
     public static void Log(string message)
     {
         if (string.IsNullOrEmpty(logFile)) return;
@@ -38,6 +55,15 @@ static class Program
     [STAThread]
     static void Main()
     {
+        using var instance = new Mutex(true, @"Local\" + InstanceName, out var first);
+        if (!first)
+        {
+            // This process was just started by the user, so it may hand the foreground on.
+            Log("already running: showing that window");
+            AllowSetForegroundWindow(ASFW_ANY);
+            if (ShowMessage != 0) PostMessage(HWND_BROADCAST, ShowMessage, IntPtr.Zero, IntPtr.Zero);
+            return;
+        }
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
@@ -428,13 +454,27 @@ sealed class MainForm : Form
     [DllImport("user32.dll")] static extern bool ReleaseCapture();
     [DllImport("user32.dll")] static extern bool GetCursorPos(out Point point);
     [DllImport("user32.dll")] static extern IntPtr PostMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam);
-    const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20, WM_NCLBUTTONDOWN = 0xA1, HTCAPTION = 2;
+    [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr hwnd, int command);
+    const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20, WM_NCLBUTTONDOWN = 0xA1, HTCAPTION = 2, SW_RESTORE = 9;
 
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
         int dark = 1;
         DwmSetWindowAttribute(Handle, DWMWA_USE_IMMERSIVE_DARK_MODE, ref dark, sizeof(int));
+    }
+
+    /** A second copy was started (Program.Main): come back from the taskbar and to the front instead. */
+    protected override void WndProc(ref Message m)
+    {
+        if (m.Msg == Program.ShowMessage && m.Msg != 0)
+        {
+            // SW_RESTORE puts a minimized window back as it was, maximized included.
+            if (WindowState == FormWindowState.Minimized) ShowWindow(Handle, SW_RESTORE);
+            Activate();
+            return;
+        }
+        base.WndProc(ref m);
     }
 
     protected override async void OnLoad(EventArgs e)

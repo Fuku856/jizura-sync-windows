@@ -79,7 +79,7 @@ Neither is code-signed, so SmartScreen may warn; choose "More info" → "Run any
 1. Download `jizura-sync-<version>-win-x64.zip` and extract it anywhere.
 2. Run `jizura-sync.exe` (keep `WebView2Loader.dll` and the `web` folder next to the exe).
 
-To update, extract the new zip. Settings carry over. The installed copy and a zip copy share their settings, so they cannot run at the same time.
+To update, extract the new zip. Settings carry over. The installed copy and a zip copy share their settings, so only one runs at a time: starting another brings the open window to the front.
 
 ## Limitations
 
