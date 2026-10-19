@@ -62,13 +62,13 @@ The bar at the bottom shows the cover art, the track, the lyric source and playb
 
 ## Install
 
-1. Download `jizura-sync-<version>-win-x64-setup.exe` from [Releases](https://github.com/Fuku856/jizura-sync-windows/releases).
+1. Download `jizura-sync-<version>-win-x64.exe` from [Releases](https://github.com/Fuku856/jizura-sync-windows/releases).
 2. Run it. It needs no administrator rights and installs for your user only (`%LOCALAPPDATA%\Programs\jizura-sync`).
 3. Start jizura-sync from the Start menu and play a song in any player (a browser tab works too).
 
 The installer is not code-signed, so SmartScreen may warn; choose "More info" → "Run anyway".
 
-- **Update**: run the new setup.exe. Close the app first if it is running. Settings live in `%LOCALAPPDATA%\jizura-sync` and carry over.
+- **Update**: run the new version's exe. Close the app first if it is running. Settings live in `%LOCALAPPDATA%\jizura-sync` and carry over.
 - **Moving from the zip**: settings are in the same place and carry over; the extracted folder can be deleted.
 - **Uninstall**: from Windows Settings → Apps. To remove the settings too, delete `%LOCALAPPDATA%\jizura-sync` afterwards.
 
@@ -104,7 +104,7 @@ The installer is made with [Inno Setup 6](https://jrsoftware.org/isinfo.php) (6.
 powershell -ExecutionPolicy Bypass -File tools/build-installer.ps1 -Version 1.2.3
 ```
 
-This runs the build above, then makes `build\installer\jizura-sync-v1.2.3-win-x64-setup.exe`. Without `-Version` it uses the csproj's `<Version>`.
+This runs the build above, then makes `build\installer\jizura-sync-v1.2.3-win-x64.exe`. Without `-Version` it uses the csproj's `<Version>`.
 
 ### Debugging
 

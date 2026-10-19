@@ -1,5 +1,5 @@
 # Build the Windows installer: build-win.ps1, then Inno Setup (win\jizura-sync.iss) into
-# build\installer\jizura-sync-v<version>-win-x64-setup.exe (the release tag's name, as the zip had).
+# build\installer\jizura-sync-v<version>-win-x64.exe (the zip's name, jizura-sync-<tag>-win-x64, with .exe).
 #
 #   powershell -ExecutionPolicy Bypass -File tools/build-installer.ps1 [-Version 1.2.3-beta.1]
 #
@@ -28,7 +28,7 @@ if (-not $iscc) { throw 'Inno Setup 6 not found -- run: winget install JRSoftwar
 & (Join-Path $PSScriptRoot 'build-win.ps1') -Version $Version
 
 if (Test-Path $out) { Remove-Item -Recurse -Force $out }
-$name = "jizura-sync-v$Version-win-x64-setup"
+$name = "jizura-sync-v$Version-win-x64"
 & $iscc /Q "/DAppVersion=$Version" "/DFileVersion=$fileVersion" "/DOutputName=$name" "/O$out" (Join-Path $root 'win/jizura-sync.iss')
 if ($LASTEXITCODE) { throw 'ISCC failed' }
 

@@ -22,7 +22,7 @@
   #define FileVersion AppVersion
 #endif
 #ifndef OutputName
-  #define OutputName "jizura-sync-v" + AppVersion + "-win-x64-setup"
+  #define OutputName "jizura-sync-v" + AppVersion + "-win-x64"
 #endif
 
 [Setup]

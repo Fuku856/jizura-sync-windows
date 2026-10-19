@@ -62,13 +62,13 @@ Windows で再生中の曲の歌詞を、リアルタイムで歌詞モーショ
 
 ## インストール
 
-1. [Releases](https://github.com/Fuku856/jizura-sync-windows/releases) から `jizura-sync-<バージョン>-win-x64-setup.exe` をダウンロードする
-2. ダウンロードした setup.exe を実行する。管理者権限は要らず、自分のユーザーだけに入る（`%LOCALAPPDATA%\Programs\jizura-sync`）
+1. [Releases](https://github.com/Fuku856/jizura-sync-windows/releases) から `jizura-sync-<バージョン>-win-x64.exe` をダウンロードする
+2. ダウンロードした exe を実行する。管理者権限は要らず、自分のユーザーだけに入る（`%LOCALAPPDATA%\Programs\jizura-sync`）
 3. スタートメニューの jizura-sync を起動し、好きなプレイヤー（ブラウザのタブも可）で曲を再生する
 
 コード署名をしていないので、SmartScreen の警告が出ることがある。その場合は「詳細情報」→「実行」で進める。
 
-- **更新**: 新しい setup.exe を実行する。起動中なら閉じてから入れ直す。設定は `%LOCALAPPDATA%\jizura-sync` にあるので引き継がれる
+- **更新**: 新しい版の exe を実行する。起動中なら閉じてから入れ直す。設定は `%LOCALAPPDATA%\jizura-sync` にあるので引き継がれる
 - **zip 版から移るとき**: 設定は同じ場所なのでそのまま使える。展開したフォルダは消してよい
 - **アンインストール**: Windows の「設定」→「アプリ」から。設定も消すときは、そのあと `%LOCALAPPDATA%\jizura-sync` を消す
 
@@ -104,7 +104,7 @@ powershell -ExecutionPolicy Bypass -File tools/build-win.ps1
 powershell -ExecutionPolicy Bypass -File tools/build-installer.ps1 -Version 1.2.3
 ```
 
-上のビルドに続けて `build\installer\jizura-sync-v1.2.3-win-x64-setup.exe` を作る。`-Version` を省くと csproj の `<Version>` になる。
+上のビルドに続けて `build\installer\jizura-sync-v1.2.3-win-x64.exe` を作る。`-Version` を省くと csproj の `<Version>` になる。
 
 ### デバッグ
 
