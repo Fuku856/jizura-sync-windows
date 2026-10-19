@@ -58,18 +58,19 @@ Windows で再生中の曲の歌詞を、リアルタイムで歌詞モーショ
 ## 必要なもの
 
 - Windows 10 バージョン 2004 以降、または Windows 11（x64）
-- [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)（x64）
-- WebView2 Runtime（Windows 11 には最初から入っている。無い場合は [Microsoft のページ](https://developer.microsoft.com/microsoft-edge/webview2/) から入れる）
+- [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)（x64）と WebView2 Runtime。どちらも、無ければインストーラーが Microsoft から取得して入れる（.NET のときだけ管理者の許可を求められる）
 
 ## インストール
 
-1. [Releases](https://github.com/Fuku856/jizura-sync-windows/releases) から `jizura-sync-<バージョン>-win-x64.zip` をダウンロードする
-2. 好きな場所に展開し、`jizura-sync.exe` を起動する（`WebView2Loader.dll` と `web` フォルダは exe の隣に置いたままにする）
-3. 好きなプレイヤー（ブラウザのタブも可）で曲を再生する
+1. [Releases](https://github.com/Fuku856/jizura-sync-windows/releases) から `jizura-sync-<バージョン>-win-x64-setup.exe` をダウンロードする
+2. ダウンロードした setup.exe を実行する。管理者権限は要らず、自分のユーザーだけに入る（`%LOCALAPPDATA%\Programs\jizura-sync`）
+3. スタートメニューの jizura-sync を起動し、好きなプレイヤー（ブラウザのタブも可）で曲を再生する
 
-コード署名をしていないので、初回は SmartScreen の警告が出ることがある。その場合は「詳細情報」→「実行」で起動する。
+コード署名をしていないので、SmartScreen の警告が出ることがある。その場合は「詳細情報」→「実行」で進める。
 
-更新するときは、新しい zip を展開し直す。設定は `%LOCALAPPDATA%\jizura-sync` にあるので引き継がれる。
+- **更新**: 新しい setup.exe を実行する。起動中なら閉じてから入れ直す。設定は `%LOCALAPPDATA%\jizura-sync` にあるので引き継がれる
+- **zip 版から移るとき**: 設定は同じ場所なのでそのまま使える。展開したフォルダは消してよい
+- **アンインストール**: Windows の「設定」→「アプリ」から。設定も消すときは、そのあと `%LOCALAPPDATA%\jizura-sync` を消す
 
 ## 制限
 
@@ -79,7 +80,7 @@ Windows で再生中の曲の歌詞を、リアルタイムで歌詞モーショ
 - 拍への同期は無い（プレイヤーの音声は読めない）
 - 書体は Google Fonts から読み込むので、オフラインでは本来の見た目にならない
 - Spotify for Windows と Apple Music for Windows での動作は未確認（ブラウザのタブでは確認済み）
-- インストーラー、自動アップデート、コード署名は無い
+- 自動アップデートとコード署名は無い
 
 ## 開発者向け
 
@@ -97,6 +98,14 @@ powershell -ExecutionPolicy Bypass -File tools/build-win.ps1
 
 `build\win` に `jizura-sync.exe`・`WebView2Loader.dll`・`web` ができる。`--recursive` を付けずに clone したときは、`git submodule update --init` を実行してからビルドする。
 
+インストーラーは [Inno Setup 6](https://jrsoftware.org/isinfo.php)（6.6 以降）で作る。`winget install JRSoftware.InnoSetup` で入れてから:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/build-installer.ps1 -Version 1.2.3
+```
+
+上のビルドに続けて `build\installer\jizura-sync-v1.2.3-win-x64-setup.exe` を作る。`-Version` を省くと csproj の `<Version>` になる。
+
 ### デバッグ
 
 `build\win\jizura-sync.exe` を次の環境変数付きで起動する。
@@ -111,7 +120,7 @@ powershell -ExecutionPolicy Bypass -File tools/build-win.ps1
 
 ### リリース
 
-`main` が最新のリリース、`dev` が開発中の版にあたる。GitHub でリリースを公開すると、[`release-windows.yml`](.github/workflows/release-windows.yml) がそのタグをビルドして zip を添付し、リリースノートを書く。
+`main` が最新のリリース、`dev` が開発中の版にあたる。GitHub でリリースを公開すると、[`release-windows.yml`](.github/workflows/release-windows.yml) がそのタグからインストーラーを作って添付し、リリースノートを書く。
 
 - タグがバージョンになる（`v1.2.3`、プレリリースは `v1.2.3-beta.1`）
 - リリースは Target を `main`、プレリリースは `dev` にして作る
