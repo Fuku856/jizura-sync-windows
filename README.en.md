@@ -58,19 +58,28 @@ The bar at the bottom shows the cover art, the track, the lyric source and playb
 ## Requirements
 
 - Windows 10 version 2004 or later, or Windows 11 (x64)
-- The [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) (x64) and the WebView2 Runtime. The installer downloads either from Microsoft and installs it when it is missing (only .NET asks for administrator permission).
+- The [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) (x64) and the WebView2 Runtime. The installer downloads either from Microsoft and installs it when it is missing (only .NET asks for administrator permission). With the zip, install them yourself (Windows 11 already has WebView2; otherwise get it from [Microsoft](https://developer.microsoft.com/microsoft-edge/webview2/)).
 
 ## Install
 
-1. Download `jizura-sync-<version>-win-x64.exe` from [Releases](https://github.com/Fuku856/jizura-sync-windows/releases).
-2. Run it. It needs no administrator rights and installs for your user only (`%LOCALAPPDATA%\Programs\jizura-sync`).
-3. Start jizura-sync from the Start menu and play a song in any player (a browser tab works too).
+[Releases](https://github.com/Fuku856/jizura-sync-windows/releases) has an installer (`.exe`) and a zip. Both hold the same app and keep settings in the same place (`%LOCALAPPDATA%\jizura-sync`).
 
-The installer is not code-signed, so SmartScreen may warn; choose "More info" → "Run anyway".
+Neither is code-signed, so SmartScreen may warn; choose "More info" → "Run anyway".
 
-- **Update**: run the new version's exe. Close the app first if it is running. Settings live in `%LOCALAPPDATA%\jizura-sync` and carry over.
-- **Moving from the zip**: settings are in the same place and carry over; the extracted folder can be deleted.
+### Installer
+
+1. Download `jizura-sync-<version>-win-x64.exe` and run it. It needs no administrator rights and installs for your user only (`%LOCALAPPDATA%\Programs\jizura-sync`).
+2. Start jizura-sync from the Start menu and play a song in any player (a browser tab works too).
+
+- **Update**: run the new version's exe. Close the app first if it is running. Settings carry over.
 - **Uninstall**: from Windows Settings → Apps. To remove the settings too, delete `%LOCALAPPDATA%\jizura-sync` afterwards.
+
+### Zip
+
+1. Download `jizura-sync-<version>-win-x64.zip` and extract it anywhere.
+2. Run `jizura-sync.exe` (keep `WebView2Loader.dll` and the `web` folder next to the exe).
+
+To update, extract the new zip. Settings carry over. The installed copy and a zip copy share their settings, so they cannot run at the same time.
 
 ## Limitations
 
@@ -120,7 +129,7 @@ For the page alone, start `./serve.sh` and open <http://127.0.0.1:5180/?mock> in
 
 ### Releases
 
-`main` is the latest release and `dev` the version in development. Publishing a release on GitHub runs [`release-windows.yml`](.github/workflows/release-windows.yml), which builds the installer from that tag, attaches it and writes the release notes.
+`main` is the latest release and `dev` the version in development. Publishing a release on GitHub runs [`release-windows.yml`](.github/workflows/release-windows.yml), which builds the installer and the zip from that tag, attaches them and writes the release notes.
 
 - The tag is the version (`v1.2.3`, or `v1.2.3-beta.1` for a pre-release).
 - Create a release with Target `main` and a pre-release with Target `dev`.
